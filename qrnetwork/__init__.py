@@ -1,8 +1,7 @@
-from .primaryfn import QStateGenerator, Belld, Pauli, QFidelity, QStateAnalyzer, \
-    QEntangle2, Qstate, Qprod, MatrixDim, QFidelity, Pauli
-from .qteleportation import QTeleportation, Bell
+from .primaryfn import Q, Qp, Is, Ebit
+from .qteleportation import Teleport
 from .qchannel import QChannel
-from .network import eswap, SWAPN
+from .network import eswap, QRep
 
 
 # Define dagger for conjugate transpose (Hermitian adjoint) of an array or matrix
