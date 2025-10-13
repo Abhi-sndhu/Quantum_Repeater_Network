@@ -62,8 +62,8 @@ class Q:
             Returns |psi> as a column vector.
             """
             d = 2 ** n
-            A = np.random.normal(size=(d, 1))
-            B = np.random.normal(size=(d, 1))
+            A = np.random.normal(0, 1/np.sqrt(2), d)
+            B = np.random.normal(0, 1/np.sqrt(2), d)
             Z = A + 1j * B                 
             psi = Z / np.linalg.norm(Z)  # normalize
             return psi.reshape(-1, 1)
@@ -75,8 +75,8 @@ class Q:
             Hilbert–Schmidt induced measure with ancilla dimension k.
             """
             d = 2 ** n
-            A = np.random.normal(size=(d, d))
-            B = np.random.normal(size=(d, d))
+            A = np.random.normal(0, 1/np.sqrt(2), (d, d))
+            B = np.random.normal(0, 1/np.sqrt(2), (d, d))
             Z = A + 1j * B                  
             rho = Z @ Z.conj().T
             rho /= np.trace(rho)
