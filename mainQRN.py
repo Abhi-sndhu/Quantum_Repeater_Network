@@ -1,4 +1,4 @@
-import numpy as np
+girimport numpy as np
 from qrnetwork import *
 # import time
 # from qrnetwork import Q, Qp, Is, Ebit, Teleport, Qrep
