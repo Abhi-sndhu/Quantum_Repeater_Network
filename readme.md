@@ -93,7 +93,7 @@ Quantum states are represented either by a complex wave function or a complex co
 ### Entanglement Criterion
 A class name **Ebit** is defined to check the nature of entanglement of a given two-qubit quantum state. This class uses different methods to check the entanglement criteria. If user do not use any specific method then by default *concurrence* is used as a method to check the entanglement.
 
-Source: [Ebit](https://github.com/SatishS11/QNeCT-India/Quantum_Repeater_Network/qrnetwork/primaryfn.py#L229-L261)
+Source: [Ebit](https://github.com/QNeCT-India/Quantum_Repeater_Network/blob/main/qrnetwork/primaryfn.py#L229-L261)
 
 ```sh
 Ebit(state)/ Ebit(state,method='method')
@@ -122,7 +122,7 @@ Ebit(state)/ Ebit(state,method='method')
 The major challange of any quantum comnnunication scheme is the communication distance due to quickly loss of weak quantum signals. To overcome this challenge, a concept of quantum network is introduced where intermediate nodes are installed between two communicating parties and some actions are performed at these nodes to directly connect the two parties. Here, we are introducing repeater-based quantum network where, quantum repeaters are installed at intermediate nodes and entangled stated is distributed. Finally, entanglement swapping is performed at those nodes to entangle the two communicating parties.\
 We defined a class **QRep** for the quantum repeater network. It takes a list of shared entangled state as input and give the final entangled state formed between the two end nodes with its fidelity value. To make it more realistic, one can also check the output under the all possible physical noises available during the whole entanglement generation process.
 
-Source: [QRep](https://github.com/SatishS11/QNeCT-India/Quantum_Repeater_Network/qrnetwork/network.py#L180-L266)
+Source: [QRep](https://github.com/QNeCT-India/Quantum_Repeater_Network/blob/main/qrnetwork/network.py#L180-L266)
 ```sh
 QRep([shared state]).linear()/ 
 QRep([shared state]).noise(noise parameters).linear()
