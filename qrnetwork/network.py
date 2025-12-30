@@ -138,19 +138,19 @@ class eswap:
         rho1 = rho1 / np.trace(rho1)
         # --- Dephasing ---
         lam_t = dephasing_coeff(T_p, T_dp, L)
-        lam_t_coeff1 = (1 - lam_t) * np.eye(16)
-        lam_t_coeff2 = lam_t * (np.kron(np.kron(np.eye(2), 
+        # lam_t_coeff1 = (1 - lam_t) * np.eye(16)
+        lam_t_coeff2 = (np.kron(np.kron(np.eye(2), 
                                                 np.kron(primaryfn.Q.Pauli.Z, primaryfn.Q.Pauli.Z)), 
                                                 np.eye(2)))
-        rho2 = lam_t_coeff1 @ rho1 @ primaryfn.Q(lam_t_coeff1).d() + \
-               lam_t_coeff2 @ rho1 @ primaryfn.Q(lam_t_coeff2).d()
+        rho2 = (1 - lam_t) * rho1 + \
+               lam_t * (lam_t_coeff2 @ rho1 @ primaryfn.Q(lam_t_coeff2).d())
         rho2 = rho2 / np.trace(rho2)
         # --- Detector noise (clicking) ---
         alpha = clicking_coeff(eta, p_d)
-        alpha_coeff1 = alpha * np.eye(16)
-        alpha_coeff2 = ((1 - alpha) / 2) * np.eye(16)
-        rho3 = alpha_coeff1 @ rho2 @ primaryfn.Q(alpha_coeff1).d() + \
-               alpha_coeff2 @ rho2 @ primaryfn.Q(alpha_coeff2).d()
+        # alpha_coeff1 = alpha * np.eye(16)
+        # alpha_coeff2 = ((1 - alpha) / 2) * np.eye(16)
+        rho3 = alpha * rho2 + \
+               ((1 - alpha) / 2)* rho2
         rho3 = rho3 / np.trace(rho3)
         # --- Fidelity with expected channels ---
         fidelities = [primaryfn.Qp(rho3, c).fid() for c in swap_pairs_matrix]
