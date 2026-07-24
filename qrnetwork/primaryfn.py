@@ -1,42 +1,69 @@
 import numpy as np
 from scipy.linalg import sqrtm, eigvals
 
-class Q:
-    def __init__(self, data):
+class Q: # creating objects for quantum states and operators
+    def __init__(self, data): 
+        # __init__ method initializes the Q object with a given state or operator.
+        #  It converts the input data into a NumPy array of complex numbers and stores it in the `state` attribute. 
         self.state = np.array(data, dtype=complex)
-        
+
+    def __array__(self, dtype=None, copy=None):
+        """
+        Let Q instances be consumed anywhere a NumPy array is expected
+        (np.kron, `@`, np.array(), etc.) without callers needing to
+        unwrap `.state` manually. This is what keeps the rest of the
+        package working even though .d()/.u()/.dm() now return Q objects
+        instead of raw arrays (see note below).
+        """
+        arr = self.state
+        return arr if dtype is None else arr.astype(dtype)
+
+    def __repr__(self):
+        return f"Q(\n{self.state}\n)"
+
     # ----- Properties / operations -----
+    # NOTE ON RETURN TYPES:
+    # Previously these methods had inconsistent return types: some
+    # returned a plain NumPy array/scalar while the class was clearly
+    # meant to be used as a fluent API (e.g. Q(qS).u().n()). Because
+    # .d(), .u() and .dm() returned a bare `np.ndarray` instead of `Q`,
+    # any attempt to chain a second Q-method after them failed with
+    # `'numpy.ndarray' object has no attribute '...'`.
+    # Fix: these three now wrap their result in `Q(...)` so chaining
+    # works. `.n()` and `.purity()` are terminal/reducing operations
+    # (they return a number, not a state) so they intentionally keep
+    # returning a plain float - that was correct before and is unchanged.
     def d(self): # dagger
-        """Return Hermitian conjugate as NumPy array."""
-        return self.state.conj().T
+        """Return Hermitian conjugate, wrapped as a Q instance."""
+        return Q(self.state.conj().T)
 
     def n(self): # norm
+        """Return Frobenius norm for any array (terminal op -> float)."""
         norm = np.linalg.norm(self.state)
-        """Return Frobenius norm for any array."""
         return round(norm, 2)
 
     def u(self): # unit
-        """Return normalized array (ket or operator)."""
+        """Return normalized state, wrapped as a Q instance."""
         norm = np.linalg.norm(self.state)
         if norm == 0:
             raise ValueError("Cannot normalize zero state/operator.")
-        return self.state / norm
-    
+        return Q(self.state / norm)
+
     def purity(self):
-        """Compute the purity of the state."""
-        self.rows, self.cols = self.state.shape
-        if self.cols == 1:
+        """Compute the purity of the state (terminal op -> float)."""
+        rows, cols = self.state.shape
+        if cols == 1:
             return 1.0
         else:
             # Purity: Tr(rho^2)
             result = np.real(np.trace(self.state @ self.state))
             return round(result, 4)
-    
+
     def dm(self): # density matrix
-        """Return density matrix for a pure state (ket)."""
+        """Return density matrix for a pure state (ket), wrapped as a Q instance."""
         if self.state.ndim != 2 or self.state.shape[1] != 1:
             raise ValueError("Density matrix can only be computed for pure states (column vectors).")
-        return self.state @ self.state.conj().T
+        return Q(self.state @ self.state.conj().T)
 
     # ----- Random state generators -----
     class rand:
@@ -172,7 +199,7 @@ class Qp:
     def ip(self): # inner product
         if Is(self.state1).ket() and Is(self.state2).ket():
             return self.state1.conj().T @ self.state2
-        elif Is(self.state1).square() and Is(self.state2).square:
+        elif Is(self.state1).square() and Is(self.state2).square():
             return np.trace(self.state1.conj().T @ self.state2)
         else:
             raise ValueError("Inputs must both be vectors (1D) or matrices (2D).")

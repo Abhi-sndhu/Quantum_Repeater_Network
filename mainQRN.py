@@ -1,17 +1,19 @@
-girimport numpy as np
+import numpy as np
 from qrnetwork import *
 # import time
 # from qrnetwork import Q, Qp, Is, Ebit, Teleport, Qrep
 
-## Example: generate a random 2-qubit pure state
-# ket0 = np.array([[1], [0]], dtype=complex)
-# ket1 = np.array([[0], [1]], dtype=complex)
+## Define quantum states
+# ket0 = Q([[1], [0]])
+# print(ket0)
+ket1 = Q([[0], [1]])
+print(ket1)
 # qS = np.cos(np.pi / 8) * ket0 + np.sin(np.pi / 8) * ket1
-# qS = Q.rand.p(4)
-qS = Q.rand.m(2)
+# qS = Q.rand.p(2)
+# qS = Q.rand.m(2)
 # print(Q(qS).n())
 # print(Qp(qS).ip())
-print(qS)
+# print(qS)
 # psi = Q([1, 0])
 
 ## Print Pauli operations
@@ -49,8 +51,8 @@ print(qS)
 # results = QChannel(qC, iteration=10).teleport()
 ## Get output of linear quantum repeater network without noise
 # shared_ent_state = [Qp(Q.Bell.psi_plus).op(),Qp(Q.Bell.phi_minus).op(),
-#                    Qp(Q.Bell.phi_plus).op(),Qp(Q.Bell.psi_plus).op(), 
-#                    Qp(Q.Bell.phi_minus).op()]
+#                     Qp(Q.Bell.phi_plus).op(),Qp(Q.Bell.psi_plus).op(), 
+#                     Qp(Q.Bell.phi_minus).op()]
 # shared_ent_state = [Q.Bell.psi_plus,Q.Bell.psi_minus,Q.Bell.phi_plus,Q.Bell.phi_minus,Q.Bell.psi_plus]
 # results = QRep(shared_ent_state).linear()
 ## Get output of linear quantum repeater network with noise
