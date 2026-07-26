@@ -76,43 +76,42 @@ def teleport_density_state(state,qchannel):
     return results
 # Teleportation function    
 class Teleport:
+
     def __init__(self, qS, qC, tol=1e-10):
+
+        self.qS = qS if isinstance(qS, primaryfn.Q) else primaryfn.Q(qS)
+        # It checks whether qS is already an instance of the Q class. If it is, it stores it directly. 
+        # Otherwise, it converts qS into a Q object by calling primaryfn.Q(qS). 
+        # This allows your class to accept either a Q object or a NumPy array transparently.
+        self.qC = qC if isinstance(qC, primaryfn.Q) else primaryfn.Q(qC)
         self.tol = tol
-        self.results = self.run(qS, qC)
-    # ---------- Helpers ----------
-    def __repr__(self):
-        return "QTeleportation Results:\n" + pprint.pformat(self.results, indent=4)
-    def run(self, qS, qC):
-        # start = time.perf_counter()
-        if primaryfn.Is(qS).ket() and primaryfn.Is(qC).ket():
-            state = primaryfn.Q(qS).u()
-            channel = primaryfn.Q(qC).u()
-            entangled = primaryfn.Ebit(channel)
-            if entangled > self.tol: 
-                output = teleport_ket_state(state, channel)
-                # end = time.perf_counter()
-                # elapsed = end - start
-                # print(f"Execution time: {elapsed:.6f} seconds")
-                return {
-                    "results": output,
-                    "Local unitary matrix": Matrix(local_unitary)
-                }
-            else:
-                raise ValueError("Your quantum channel is not entangled.")
-        elif primaryfn.Is(qS).square() and primaryfn.Is(qC).square():
-            state = primaryfn.Q(qS).u()
-            channel = primaryfn.Q(qC).u()
-            conc = primaryfn.Ebit(channel)
-            if np.abs(conc)!=0: #np.isclose(conc, 1.0) #np.abs(conc) > self.tol:
-                output = teleport_density_state(state, channel)
-                # end = time.perf_counter()
-                # elapsed = end - start
-                # print(f"Execution time: {elapsed:.6f} seconds")
-                return {
-                    "results": output,
-                    "Local unitary matrix": Matrix(local_unitary)
-                }
-            else:
-                raise ValueError("Your quantum channel is not entangled.")
+        self.results = None
+
+    def run(self):
+
+        state = self.qS.u()
+        channel = self.qC.u()
+
+        ent = primaryfn.Ebit(channel)
+
+        if np.abs(ent) <= self.tol:
+            raise ValueError("Quantum channel is not entangled.")
+
+        if primaryfn.Is(state).ket():
+
+            output = teleport_ket_state(state, channel)
+
+        elif primaryfn.Is(state).square():
+
+            output = teleport_density_state(state, channel)
+
         else:
-            raise ValueError("Incorrect dimensions for quantum state or quantum channel.")
+
+            raise ValueError("Invalid quantum state.")
+
+        self.results = {
+            "results": output,
+            "Local unitary matrix": Matrix(local_unitary)
+        }
+
+        return self.results

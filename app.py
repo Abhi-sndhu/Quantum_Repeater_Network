@@ -17,7 +17,6 @@ import warnings
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import streamlit as st
 
 from qrnetwork import Q, Qp, Is, Ebit, Teleport, QChannel, eswap, QRep
@@ -80,31 +79,69 @@ def to_bmatrix_latex(x, decimals=2):
     return r"\begin{bmatrix}" + r" \\ ".join(rows) + r"\end{bmatrix}"
 
 
-def draw_topology(n_repeaters, total_distance):
-    """Draw a linear repeater-chain diagram: End A -- R1 -- R2 -- ... -- End B."""
+def draw_topology_svg(n_repeaters, total_distance):
+    """
+    Build a linear repeater-chain diagram (End A -- R1 -- ... -- End B) as raw
+    SVG. SVG is vector graphics, so it stays perfectly sharp at any zoom or
+    screen density -- unlike a matplotlib PNG rendered at a fixed pixel size,
+    which is what was causing the blurriness.
+    """
     n_links = n_repeaters + 1
     n_nodes = n_repeaters + 2
-    xs = np.linspace(0, 10, n_nodes)
+    link_len = total_distance / n_links
+
+    spacing = 140
+    margin = 70
+    width = spacing * (n_nodes - 1) + 2 * margin
+    height = 160
+    y = height / 2
+    xs = [margin + i * spacing for i in range(n_nodes)]
     labels = ["End A"] + [f"R{i + 1}" for i in range(n_repeaters)] + ["End B"]
 
-    fig, ax = plt.subplots(figsize=(min(10, 1.6 * n_nodes), 2.2))
-    for i in range(n_nodes - 1):
-        ax.plot([xs[i], xs[i + 1]], [0, 0], color="#9ca3af", zorder=1, linewidth=1.5)
+    parts = [
+        f'<svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" '
+        f'style="width:100%; height:auto; display:block; font-family:-apple-system,Segoe UI,Roboto,sans-serif;">',
+        """
+        <defs>
+          <radialGradient id="endGrad" cx="35%" cy="30%" r="75%">
+            <stop offset="0%" stop-color="#60a5fa"/>
+            <stop offset="100%" stop-color="#1d4ed8"/>
+          </radialGradient>
+          <radialGradient id="dotGrad" cx="35%" cy="30%" r="75%">
+            <stop offset="0%" stop-color="#fcd34d"/>
+            <stop offset="100%" stop-color="#d97706"/>
+          </radialGradient>
+        </defs>
+        """,
+    ]
 
+    # Links (lines + per-link distance label)
+    for i in range(n_nodes - 1):
+        x1, x2 = xs[i], xs[i + 1]
+        parts.append(f'<line x1="{x1}" y1="{y}" x2="{x2}" y2="{y}" stroke="#9ca3af" stroke-width="2.5"/>')
+        mid = (x1 + x2) / 2
+        parts.append(
+            f'<text x="{mid}" y="{y + 26}" text-anchor="middle" font-size="11" fill="#6b7280">{link_len:.1f} km</text>'
+        )
+
+    # Nodes
     for i, (x, label) in enumerate(zip(xs, labels)):
         if i == 0 or i == n_nodes - 1:
-            ax.add_patch(plt.Circle((x, 0), 0.22, color="#2563eb", zorder=3))
+            parts.append(f'<circle cx="{x}" cy="{y}" r="20" fill="url(#endGrad)" stroke="#1e3a8a" stroke-width="1.5"/>')
         else:
-            ax.add_patch(plt.Rectangle((x - 0.32, -0.22), 0.64, 0.44, fill=False, edgecolor="#374151", zorder=3))
-            for dx in (-0.11, 0.11):
-                ax.add_patch(plt.Circle((x + dx, 0), 0.09, color="#f59e0b", zorder=4))
-        ax.text(x, 0.42, label, ha="center", va="bottom", fontsize=9, fontweight="bold")
+            parts.append(
+                f'<rect x="{x - 28}" y="{y - 20}" width="56" height="40" rx="9" '
+                f'fill="#ffffff" stroke="#374151" stroke-width="1.5"/>'
+            )
+            parts.append(f'<circle cx="{x - 10}" cy="{y}" r="8" fill="url(#dotGrad)"/>')
+            parts.append(f'<circle cx="{x + 10}" cy="{y}" r="8" fill="url(#dotGrad)"/>')
+        parts.append(
+            f'<text x="{x}" y="{y - 34}" text-anchor="middle" font-size="13" font-weight="700" '
+            f'fill="#111827">{label}</text>'
+        )
 
-    ax.set_xlim(xs[0] - 1, xs[-1] + 1)
-    ax.set_ylim(-0.7, 0.7)
-    ax.axis("off")
-    fig.tight_layout()
-    return fig, n_links
+    parts.append("</svg>")
+    return "".join(parts), n_links
 
 
 def run_repeater_simulation(distance, n_repeaters, bell_key, noise_enabled, T_p_us, T2_us, eta, p_d, fiber_loss):
@@ -142,9 +179,35 @@ def run_repeater_simulation(distance, n_repeaters, bell_key, noise_enabled, T_p_
 # ----------------------------------------------------------------------
 st.markdown(
     """
-    <div style="text-align:center; padding: 1.2rem 0 0.6rem 0;">
-        <h1 style="margin-bottom:0;">QNeCT</h1>
-        <p style="color:#4b5563; font-size:1.05rem;">Quantum Network and Communication Toolbox</p>
+    <div style="
+        text-align:center;
+        padding: 2rem 1.5rem 1.7rem 1.5rem;
+        margin-bottom: 1.2rem;
+        border-radius: 18px;
+        background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 45%, #3b82f6 100%);
+        box-shadow: 0 8px 24px rgba(29, 78, 216, 0.25);
+    ">
+        <div style="display:flex; align-items:center; justify-content:center; gap:14px;">
+            <svg width="46" height="46" viewBox="0 0 46 46" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="8" cy="23" r="6" fill="#fcd34d"/>
+                <circle cx="38" cy="8" r="6" fill="#fcd34d"/>
+                <circle cx="38" cy="38" r="6" fill="#fcd34d"/>
+                <line x1="8" y1="23" x2="38" y2="8" stroke="#e5e7eb" stroke-width="2.5"/>
+                <line x1="8" y1="23" x2="38" y2="38" stroke="#e5e7eb" stroke-width="2.5"/>
+                <line x1="38" y1="8" x2="38" y2="38" stroke="#e5e7eb" stroke-width="2.5" stroke-dasharray="3,3"/>
+            </svg>
+            <h1 style="
+                margin:0;
+                color:#ffffff;
+                font-size:2.6rem;
+                font-weight:800;
+                letter-spacing:1px;
+                text-shadow: 0 2px 10px rgba(0,0,0,0.15);
+            ">QNeCT</h1>
+        </div>
+        <p style="color:#dbeafe; font-size:1.05rem; margin:0.5rem 0 0 0; letter-spacing:0.3px;">
+            Quantum Network and Communication Toolbox
+        </p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -197,8 +260,12 @@ tab_sim, tab_plots, tab_docs, tab_tools = st.tabs(["Simulation", "Plots", "Docum
 # ---------------- Simulation tab ----------------
 with tab_sim:
     st.subheader("Selected Network Topology")
-    fig, n_links = draw_topology(n_repeaters, distance)
-    st.pyplot(fig)
+    topo_svg, n_links = draw_topology_svg(n_repeaters, distance)
+    st.markdown(
+        f'<div style="background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; '
+        f'padding:1rem 0.5rem;">{topo_svg}</div>',
+        unsafe_allow_html=True,
+    )
     st.caption(
         f"Linear topology: {n_repeaters} repeater(s), {n_links} link(s), "
         f"~{distance / n_links:.2f} km per link"

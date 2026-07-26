@@ -33,16 +33,54 @@ class Q: # creating objects for quantum states and operators
     # works. `.n()` and `.purity()` are terminal/reducing operations
     # (they return a number, not a state) so they intentionally keep
     # returning a plain float - that was correct before and is unchanged.
+
+    def __add__(self, other): # Addition (+)
+        if isinstance(other, Q):
+            return Q(self.state + other.state)
+        return Q(self.state + other)
+        
+    def __sub__(self, other): #Subtraction (-)
+        if isinstance(other, Q):
+            return Q(self.state - other.state)
+        return Q(self.state - other)
+
+    def __mul__(self, other): # Scalar Multiplication (*)
+        if np.isscalar(other):
+            return Q(self.state * other)
+        raise TypeError(
+            "Use '@' for matrix multiplication. '*' is reserved for scalar multiplication."
+        )
+
+    def __rmul__(self, other): # Scalar Multiplication from the Left
+        return self.__mul__(other)
+
+    def __truediv__(self, other): # Scalar Division (/)
+        if np.isscalar(other):
+            if other == 0:
+                raise ZeroDivisionError("Division by zero.")
+            return Q(self.state / other)
+        raise TypeError("Division is only defined by a scalar.")
+
+    def __matmul__(self, other): # Matrix Multiplication (@)
+        if isinstance(other, Q):
+            return Q(self.state @ other.state)
+        return Q(self.state @ other)
+
+    def item(self):
+        """
+        Return the scalar value if the quantum object contains a single element.
+        """
+        return self.state.item()
+
     def d(self): # dagger
         """Return Hermitian conjugate, wrapped as a Q instance."""
         return Q(self.state.conj().T)
 
-    def n(self): # norm
-        """Return Frobenius norm for any array (terminal op -> float)."""
+    def n(self): # norm: ∥x∥=\sqrt{x^† x} ; \sqrt{Tr(A†A)}	
         norm = np.linalg.norm(self.state)
         return round(norm, 2)
 
-    def u(self): # unit
+    def u(self): # unit |ψ⟩/∥ψ∥ 
         """Return normalized state, wrapped as a Q instance."""
         norm = np.linalg.norm(self.state)
         if norm == 0:
@@ -75,7 +113,7 @@ class Q: # creating objects for quantum states and operators
             A = np.random.normal(size=(d, d))
             B = np.random.normal(size=(d, d))
             Z = A + 1j * B
-            Q, R = np.linalg.qr(Z)
+            Q, R = np.linalg.qr(Z) # QR decomposition of Z
 
             # Make Q Haar by adjusting phases
             Lambda = np.diag([R[i, i] / np.abs(R[i, i]) for i in range(d)])
@@ -93,7 +131,7 @@ class Q: # creating objects for quantum states and operators
             B = np.random.normal(0, 1/np.sqrt(2), d)
             Z = A + 1j * B                 
             psi = Z / np.linalg.norm(Z)  # normalize
-            return psi.reshape(-1, 1)
+            return Q(psi.reshape(-1, 1))
 
         @staticmethod
         def m(n): # mixed state
@@ -107,15 +145,15 @@ class Q: # creating objects for quantum states and operators
             Z = A + 1j * B                  
             rho = Z @ Z.conj().T
             rho /= np.trace(rho)
-            return rho
+            return Q(rho)
     
     # ----- Bell states -----
     class Bell:
-        phi_plus  = np.array([[1.0], [0.0], [0.0], [1.0]], dtype=complex) / np.sqrt(2)
-        phi_minus = np.array([[1.0], [0.0], [0.0], [-1.0]], dtype=complex) / np.sqrt(2)
-        psi_plus  = np.array([[0.0], [1.0], [1.0], [0.0]], dtype=complex) / np.sqrt(2)
-        psi_minus = np.array([[0.0], [1.0], [-1.0], [0.0]], dtype=complex) / np.sqrt(2)
-        
+        phi_plus = np.array([[1], [0], [0], [1]], dtype=complex) / np.sqrt(2)
+        phi_minus = np.array([[1], [0], [0], [-1]], dtype=complex) / np.sqrt(2)
+        psi_plus = np.array([[0], [1], [1], [0]], dtype=complex) / np.sqrt(2)
+        psi_minus = np.array([[0], [1], [-1], [0]], dtype=complex) / np.sqrt(2)
+
         @classmethod
         def all(cls):
             """
@@ -152,7 +190,7 @@ class Q: # creating objects for quantum states and operators
             if p is None:
                 p = np.random.uniform(low=1/2, high=1.0)
             # If p is provided, use it directly
-            return p * bell_pure + (1 - p) * I4
+            return Q(p * bell_pure + (1 - p) * I4)
 
 
 class Is:
@@ -198,19 +236,19 @@ class Qp:
     
     def ip(self): # inner product
         if Is(self.state1).ket() and Is(self.state2).ket():
-            return self.state1.conj().T @ self.state2
+            return Q(self.state1.conj().T @ self.state2)
         elif Is(self.state1).square() and Is(self.state2).square():
-            return np.trace(self.state1.conj().T @ self.state2)
+            return Q(np.trace(self.state1.conj().T @ self.state2))
         else:
             raise ValueError("Inputs must both be vectors (1D) or matrices (2D).")
             
     def op(self): # Outer product
         if Is(self.state1).square() or Is(self.state2).square():
             raise ValueError("Both inputs must be 1D vectors.")
-        return self.state1 @ self.state2.conj().T
+        return Q(self.state1 @ self.state2.conj().T)
     
     def tp(self): # Tensor product
-        return np.kron(self.state1, self.state2)
+        return Q(np.kron(self.state1, self.state2))
     
     def fid(self): # Fidelity
         # Case 1: both are pure states (kets)
@@ -224,7 +262,7 @@ class Qp:
             sqrt_rho = sqrtm(self.state1)
             inner = sqrt_rho @ self.state2 @ sqrt_rho
             sqrt_inner = sqrtm(inner)
-            fidelity = np.real(np.trace(sqrt_inner))
+            fidelity = np.real(np.trace(sqrt_inner))**2
             return round(fidelity, 4)
         
         # Case 3: one pure, one mixed
