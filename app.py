@@ -181,7 +181,7 @@ st.markdown(
     """
     <div style="
         text-align:center;
-        padding: 2rem 1.5rem 1.7rem 1.5rem;
+        padding: 1.2rem 1.5rem 1.1rem 1.5rem;
         margin-bottom: 1.2rem;
         border-radius: 18px;
         background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 45%, #3b82f6 100%);
@@ -199,13 +199,13 @@ st.markdown(
             <h1 style="
                 margin:0;
                 color:#ffffff;
-                font-size:2.6rem;
-                font-weight:800;
+                font-size:4.5rem;
+                font-weight:600;
                 letter-spacing:1px;
                 text-shadow: 0 2px 10px rgba(0,0,0,0.15);
             ">QNeCT</h1>
         </div>
-        <p style="color:#dbeafe; font-size:1.05rem; margin:0.5rem 0 0 0; letter-spacing:0.3px;">
+        <p style="color:#dbeafe; font-size:2rem; margin:0.5rem 0 0 0; letter-spacing:0.3px;">
             Quantum Network and Communication Toolbox
         </p>
     </div>
