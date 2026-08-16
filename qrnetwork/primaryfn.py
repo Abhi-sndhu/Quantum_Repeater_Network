@@ -324,3 +324,67 @@ class Ebit:
             return val
         else:
             raise ValueError("Input must be 4x1 ket or 4x4 density matrix.")
+
+# ---------------------------------------------------------------------------
+# Multi-qubit utilities and density matrix validations
+# ---------------------------------------------------------------------------
+
+def partial_trace(rho: np.ndarray, n_qubits: int, qubit: int) -> np.ndarray:
+    if not (0 <= qubit < n_qubits):
+        raise ValueError(f"qubit {qubit} out of range for n_qubits={n_qubits}")
+    reshaped = rho.reshape([2] * (2 * n_qubits))
+    traced = np.trace(reshaped, axis1=qubit, axis2=qubit + n_qubits)
+    dim = 2 ** (n_qubits - 1)
+    return traced.reshape(dim, dim)
+
+
+def partial_trace_multi(rho: np.ndarray, n_qubits: int, qubits: list[int]) -> np.ndarray:
+    out = rho
+    n = n_qubits
+    for q in sorted(qubits, reverse=True):
+        out = partial_trace(out, n, q)
+        n -= 1
+    return out
+
+
+def expand_with_maximally_mixed(rho_kept: np.ndarray, kept_positions: list[int], total_qubits: int) -> np.ndarray:
+    missing = [q for q in range(total_qubits) if q not in kept_positions]
+    n_missing = len(missing)
+
+    identity_block = np.eye(2**n_missing, dtype=complex)
+    combined = np.kron(rho_kept, identity_block) / (2**n_missing)
+
+    order = list(kept_positions) + missing
+    inverse_order = list(np.argsort(order))
+    row_perm = inverse_order
+    col_perm = [total_qubits + p for p in inverse_order]
+    perm = row_perm + col_perm
+
+    tensor = combined.reshape([2] * (2 * total_qubits))
+    tensor = np.transpose(tensor, perm)
+    dim = 2**total_qubits
+    return tensor.reshape(dim, dim)
+
+
+def fidelity_to_state(rho: np.ndarray, target: np.ndarray) -> float:
+    """Fidelity of `rho` with a target state (given as a ket or a density matrix)."""
+    target_rho = (
+        np.outer(target, target.conj()) 
+        if (target.ndim == 1 or target.shape == (target.size, 1)) 
+        else target
+    )
+    return float(np.trace(rho @ target_rho).real)
+
+
+def is_valid_density_matrix(rho: np.ndarray, atol: float = 1e-6) -> tuple[bool, str]:
+    """Sanity-check that `rho` is Hermitian, trace-1, and positive-semidefinite."""
+    if not np.allclose(rho, rho.conj().T, atol=atol):
+        return False, "not Hermitian"
+    trace = np.trace(rho)
+    if not np.isclose(trace.real, 1.0, atol=atol) or not np.isclose(trace.imag, 0.0, atol=atol):
+        return False, f"trace != 1 (got {trace})"
+    hermitian_part = (rho + rho.conj().T) / 2
+    eigenvalues = np.linalg.eigvalsh(hermitian_part)
+    if np.any(eigenvalues < -atol):
+        return False, f"not positive-semidefinite (min eigenvalue {eigenvalues.min():.3e})"
+    return True, "ok"
