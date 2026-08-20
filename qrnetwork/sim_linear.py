@@ -227,7 +227,7 @@ class RepeaterSimulation:
         completed_pairs: list[CompletedPair] = []
         self._trigger_source_attempts()
 
-        target_bell = primaryfn.Q(primaryfn.Q.Bell.phi_plus).dm().state
+        target_bell = primaryfn.Q.Bell.phi_plus
 
         while self.queue and len(completed_pairs) < self.config.n_target_pairs:
             event = self.queue.pop()
@@ -250,7 +250,7 @@ class RepeaterSimulation:
                 if attempt.succeeded and attempt.new_pair is not None:
                     new_pair = attempt.new_pair
                     if new_pair.span_hops == self.config.n_nodes - 1:
-                        fid = primaryfn.fidelity_to_state(new_pair.rho, target_bell)
+                        fid=primaryfn.Qp(new_pair.rho,target_bell).fid()
                         completed_pairs.append(
                             CompletedPair(id=new_pair.id, rho=new_pair.rho, fidelity=fid, created_time=self.now,))
                         attempt.outer_left.status = SlotStatus.EMPTY

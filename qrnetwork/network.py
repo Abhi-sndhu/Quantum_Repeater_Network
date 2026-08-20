@@ -2,6 +2,7 @@ from __future__ import annotations
 import numpy as np
 from . import qteleportation
 from . import primaryfn
+from . import Q
 from sympy import Matrix
 import warnings
 from dataclasses import dataclass, field
@@ -357,7 +358,7 @@ class ImperfectBSM:
     def apply(self, rho_4q: np.ndarray) -> np.ndarray:
         if self.fidelity >= 1.0:
             return rho_4q
-        reduced_outer = primaryfn.partial_trace_multi(rho_4q, 4, [1, 2])
+        reduced_outer = primaryfn.partial_trace(rho_4q, 4, [1, 2])
         scrambled = primaryfn.expand_with_maximally_mixed(reduced_outer, kept_positions=[0, 3], total_qubits=4)
         return self.fidelity * rho_4q + (1 - self.fidelity) * scrambled
 
@@ -378,7 +379,7 @@ def perform_bell_swap(rho_left_pair: np.ndarray,rho_right_pair: np.ndarray,imper
 
     projector = _MIDDLE_PROJECTORS[outcome]
     projected = projector @ rho_4q @ projector / probs[outcome]
-    rho_outer = primaryfn.partial_trace_multi(projected, 4, [1, 2])
+    rho_outer = primaryfn.partial_trace(projected, 4, [1, 2])
     rho_outer = apply_dark_count_mixing(rho_outer, heralding)
 
     correction = _CORRECTION_OPS[outcome]
@@ -389,12 +390,6 @@ def perform_bell_swap(rho_left_pair: np.ndarray,rho_right_pair: np.ndarray,imper
 # ---------------------------------------------------------------------------
 # Link Generation and Swappers
 # ---------------------------------------------------------------------------
-
-def werner_state(rho_target: np.ndarray, fidelity: float) -> np.ndarray:
-    if fidelity >= 1.0:
-        return rho_target
-    others = _OTHER_BELL_STATES_SUM - rho_target
-    return fidelity * rho_target + (1 - fidelity) / 3 * others
 
 
 @dataclass(frozen=True)
@@ -407,9 +402,10 @@ class EntanglementSource:
     def attempt(self, rng: np.random.Generator) -> tuple[float, BellSwapResult]:
         n_trials = rng.geometric(self.heralding.p_success)
         wait_time_s = n_trials * self.trial_period_s
-
-        rho_left = werner_state(_RHO_PHI_PLUS, self.source_state_fidelity)
-        rho_right = werner_state(_RHO_PHI_PLUS, self.source_state_fidelity)
+        Fid=np.random.default_rng().uniform(self.source_state_fidelity,1)
+        rho_left = Q.Werner(p=(4*Fid-1)/3)
+        Fid=np.random.default_rng().uniform(self.source_state_fidelity,1)
+        rho_right = Q.Werner(p=(4*Fid-1)/3)
         result = perform_bell_swap(rho_left, rho_right, self.imperfect_bsm, self.heralding, rng)
         return wait_time_s, result
 

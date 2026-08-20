@@ -1,4 +1,4 @@
-from .primaryfn import Q, Qp, Is, Ebit, partial_trace, partial_trace_multi, fidelity_to_state, is_valid_density_matrix
+from .primaryfn import Q, Qp, Is, Ebit, partial_trace
 from .qteleportation import Teleport
 from .qchannel import QChannel
 from .network import eswap, QRep, RepeaterChain, MemorySlot, EntangledPair, EntanglementSource, EntanglementSwapper, SlotStatus, heralding_statistics

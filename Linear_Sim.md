@@ -88,7 +88,7 @@ Executes the discrete-event loop until either the event queue empties or `config
 1. **Trigger initial link attempts** — `_trigger_source_attempts()` starts an entanglement-generation attempt on every link whose memory slots are free, scheduling a `SOURCE_COMPLETE` event for each.
 2. **Main loop** — repeatedly pops the earliest event off the queue and advances `self.now` to its time:
    - **`SOURCE_COMPLETE`**: the elementary link pair produced by the source is marked `READY` in its two memory slots.
-   - **`SWAP_RESOLVE`**: the outcome of a swap attempt (started earlier by the scheduler) is resolved. On success, if the new pair now spans the *entire* chain (`span_hops == n_nodes - 1`), its fidelity against the ideal Φ⁺ Bell state is computed (via `primaryfn.fidelity_to_state`) and it is recorded as a **`CompletedPair`**; otherwise the (still partial) pair's slots are marked `READY` so it can be used in a further swap. On failure, the involved slots are freed.
+   - **`SWAP_RESOLVE`**: the outcome of a swap attempt (started earlier by the scheduler) is resolved. On success, if the new pair now spans the *entire* chain (`span_hops == n_nodes - 1`), its fidelity against the ideal Φ⁺ Bell state is computed (via `primaryfn.Qp(state1,state2).fid()`) and it is recorded as a **`CompletedPair`**; otherwise the (still partial) pair's slots are marked `READY` so it can be used in a further swap. On failure, the involved slots are freed.
    - After handling each event, the loop again calls `_trigger_source_attempts()` (to refill any newly-freed link slots) and `_check_and_trigger_swaps()` (to start a swap wherever a repeater now has ready pairs on both sides).
 3. Once the loop ends, it computes:
    - **`average_fidelity`** — mean fidelity over all completed pairs (0.0 if none).
@@ -112,7 +112,7 @@ Executes the discrete-event loop until either the event queue empties or `config
 | **`Scheduler`** | Thin coordination layer: given the chain/source/swapper, knows how to start a source attempt (`start_source_attempt`) or a swap attempt (`start_swap`) at a given time and package the result as an `Event` payload. |
 | **`EventQueue`** / **`Event`** / **`EventType`** | Minimal discrete-event simulation primitives: a time-ordered priority queue of `Event` objects (`SOURCE_COMPLETE` or `SWAP_RESOLVE`), each carrying a payload (`EntangledPair` or `SwapAttempt`). |
 | **`SwapAttempt`** | Dataclass capturing the full context and outcome of one swap attempt (which slots were involved, whether it succeeded, the resulting `EntangledPair` if any, and when it resolves). |
-| **`primaryfn.fidelity_to_state(rho, target)`** | Computes the fidelity `Tr(rho · target)` of a density matrix against a target state (ket or density matrix) — used to score each completed end-to-end pair against the ideal Φ⁺ Bell state. |
+| **`primaryfn.Qp(rho, target).fid()`** | Computes the fidelity `target_bra · rho · target_ket)` of a density matrix against a target state (ket) — used to score each completed end-to-end pair against the ideal Φ⁺ Bell state. |
 
 ## `SimulationResult`
 
@@ -144,7 +144,7 @@ RepeaterSimulation.__init__
 RepeaterSimulation.run()
       │  loop: SOURCE_COMPLETE / SWAP_RESOLVE events
       │        → triggers new source attempts & swap attempts
-      │        → scores completed end-to-end pairs vs. Φ⁺ (fidelity_to_state)
+      │        → scores completed end-to-end pairs vs. Φ⁺ (Qp().fid())
       ▼
 SimulationResult (completed_pairs, total_sim_time, average_fidelity, entanglement_rate)
       │
