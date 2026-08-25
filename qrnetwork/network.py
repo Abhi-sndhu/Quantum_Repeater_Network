@@ -7,7 +7,7 @@ from sympy import Matrix
 import warnings
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Optional
+
 # Change the default warning format
 def custom_warning_format(message, category, filename, lineno, line=None):
     return f"⚠️ {message}\n" # Just return warn message not category, filename, etc.
@@ -273,19 +273,16 @@ class QRep:
 # ---------------------------------------------------------------------------
 # Projectors & Operators for Hardware Models & BSM
 # ---------------------------------------------------------------------------
-_I2 = primaryfn.Q.Pauli.I
-_PAULI_X = primaryfn.Q.Pauli.X
-_PAULI_Y = primaryfn.Q.Pauli.Y
-_PAULI_Z = primaryfn.Q.Pauli.Z
+_I2 = pauli_corrections[0][0]
+_PAULI_Z = pauli_corrections[0][1]
+_PAULI_X = pauli_corrections[0][2]
+_PAULI_Y = pauli_corrections[0][3]
 
 _RHO_00 = primaryfn.Q([[1],[0],[0],[0]]).dm().state
 _RHO_11 = primaryfn.Q([[0],[0],[0],[1]]).dm().state
-_RHO_PHI_PLUS = primaryfn.Q(primaryfn.Q.Bell.phi_plus).dm().state
-_RHO_PHI_MINUS = primaryfn.Q(primaryfn.Q.Bell.phi_minus).dm().state
-_RHO_PSI_PLUS = primaryfn.Q(primaryfn.Q.Bell.psi_plus).dm().state
-_RHO_PSI_MINUS = primaryfn.Q(primaryfn.Q.Bell.psi_minus).dm().state
+_RHO_PSI_PLUS = primaryfn.Q(bell_states[2]).dm().state
+_RHO_PSI_MINUS = primaryfn.Q(bell_states[3]).dm().state
 _MAX_MIXED_2Q = np.eye(4, dtype=complex) / 4
-_OTHER_BELL_STATES_SUM = _RHO_PHI_PLUS + _RHO_PHI_MINUS + _RHO_PSI_PLUS + _RHO_PSI_MINUS
 
 _PSI_PROJECTORS = (_RHO_PSI_PLUS, _RHO_PSI_MINUS)
 _MIDDLE_PROJECTORS = tuple(np.kron(np.kron(_I2, P), _I2) for P in _PSI_PROJECTORS)
@@ -297,40 +294,40 @@ _CORRECTION_OPS = (np.kron(_I2, _PAULI_X), np.kron(_I2, _PAULI_Y))
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
-class HeraldingStatistics:
-    p_success: float
-    p_correct_click: float
-    p_wrong_bell_pair: float
-    p_no_information: float
+class DarkHeralding:
+    eta_eff: float            # effective probability of success
+    p_correct_click: float    # real event | success
+    p_wrong_bell_pair: float  # wrong bell pair | success
+    p_photon_loss: float      # photon lost | success
 
     def __post_init__(self) -> None:
-        total = self.p_correct_click + self.p_wrong_bell_pair + self.p_no_information
+        total = self.p_correct_click + self.p_wrong_bell_pair + self.p_photon_loss
         if not np.isclose(total, 1.0, atol=1e-9):
             raise ValueError(f"heralding outcome probabilities must sum to 1, got {total}")
 
+    @classmethod
+    def calculate(cls, eta_left: float, eta_right: float, p_dark: float) -> DarkHeralding:
+        both_arrive = eta_left * eta_right
+        only_left = eta_left * (1 - eta_right)
+        only_right = (1 - eta_left) * eta_right
+        neither_arrives = (1 - eta_left) * (1 - eta_right)
 
-def heralding_statistics(eta_left: float, eta_right: float, p_dark: float) -> HeraldingStatistics:
-    both_arrive = eta_left * eta_right
-    only_left = eta_left * (1 - eta_right)
-    only_right = (1 - eta_left) * eta_right
-    neither_arrives = (1 - eta_left) * (1 - eta_right)
-
-    p_success = (0.5 * both_arrive * (1 - p_dark) ** 2
-        + 0.5 * both_arrive * 2 * p_dark * (1 - p_dark) ** 2
-        + neither_arrives * 4 * p_dark**2 * (1 - p_dark) ** 2
-        + only_left * 2 * p_dark * (1 - p_dark) ** 2
-        + only_right * 2 * p_dark * (1 - p_dark) ** 2)
-    
-    p_correct_click = (0.5 * both_arrive * (1 - p_dark) ** 2) / p_success
-    p_wrong_bell_pair = (0.5 * both_arrive * 2 * p_dark * (1 - p_dark) ** 2) / p_success
-    p_no_information = 1.0 - p_correct_click - p_wrong_bell_pair
-    return HeraldingStatistics(p_success, p_correct_click, p_wrong_bell_pair, p_no_information)
+        eta_eff = (0.5 * both_arrive * (1 - p_dark) ** 2
+            + 0.5 * both_arrive * 2 * p_dark * (1 - p_dark) ** 2
+            + neither_arrives * 4 * p_dark**2 * (1 - p_dark) ** 2
+            + only_left * 2 * p_dark * (1 - p_dark) ** 2
+            + only_right * 2 * p_dark * (1 - p_dark) ** 2)
+        
+        p_correct_click = (0.5 * both_arrive * (1 - p_dark) ** 2) / eta_eff
+        p_wrong_bell_pair = (0.5 * both_arrive * 2 * p_dark * (1 - p_dark) ** 2) / eta_eff
+        p_photon_loss = 1.0 - p_correct_click - p_wrong_bell_pair
+        return cls(eta_eff, p_correct_click, p_wrong_bell_pair, p_photon_loss)
 
 
-def apply_dark_count_mixing(rho: np.ndarray, stats: HeraldingStatistics) -> np.ndarray:
-    return (stats.p_correct_click * rho
-        + stats.p_wrong_bell_pair * (_RHO_00 + _RHO_11) / 2
-        + stats.p_no_information * _MAX_MIXED_2Q)
+    def apply(self, rho: np.ndarray) -> np.ndarray:
+        return (self.p_correct_click * rho
+            + self.p_wrong_bell_pair * (_RHO_00 + _RHO_11) / 2
+            + self.p_photon_loss * _MAX_MIXED_2Q)
 
 
 @dataclass(frozen=True)
@@ -353,38 +350,37 @@ class DephasingMemory:
 
 @dataclass(frozen=True)
 class ImperfectBSM:
-    fidelity: float = 1.0
+    fidelity: float
 
     def apply(self, rho_4q: np.ndarray) -> np.ndarray:
         if self.fidelity >= 1.0:
             return rho_4q
-        reduced_outer = primaryfn.partial_trace(rho_4q, 4, [1, 2])
-        scrambled = primaryfn.expand_with_maximally_mixed(reduced_outer, kept_positions=[0, 3], total_qubits=4)
+        reduced_outer = Q(rho_4q).partial_trace( 4, [1, 2])
+        scrambled = reduced_outer.expand_mixed(kept_positions=[0, 3], total_qubits=4).state
         return self.fidelity * rho_4q + (1 - self.fidelity) * scrambled
 
 
 @dataclass(frozen=True)
 class BellSwapResult:
-    rho: np.ndarray
-    outcome: int  # 0 -> psi+ heralded, 1 -> psi- heralded
+    rho: np.ndarray  
 
+    @classmethod
+    def perform(cls, rho_left_pair: np.ndarray,rho_right_pair: np.ndarray,imperfect_bsm: ImperfectBSM,
+                        heralding_probs: DarkHeralding,rng: np.random.Generator,) -> BellSwapResult:
+        rho_4q = np.kron(rho_left_pair, rho_right_pair)
+        rho_4q = imperfect_bsm.apply(rho_4q)
+        probs = np.clip(np.array([np.trace(P @ rho_4q).real for P in _MIDDLE_PROJECTORS]), 0.0, None)
+        probs_normalised = probs / probs.sum()
+        outcome = int(rng.choice(2, p=probs_normalised))  # 0 -> psi+ heralded, 1 -> psi- heralded
 
-def perform_bell_swap(rho_left_pair: np.ndarray,rho_right_pair: np.ndarray,imperfect_bsm: ImperfectBSM,
-                      heralding: HeraldingStatistics,rng: np.random.Generator,) -> BellSwapResult:
-    rho_4q = np.kron(rho_left_pair, rho_right_pair)
-    rho_4q = imperfect_bsm.apply(rho_4q)
-    probs = np.clip(np.array([np.trace(P @ rho_4q).real for P in _MIDDLE_PROJECTORS]), 0.0, None)
-    probs_normalised = probs / probs.sum()
-    outcome = int(rng.choice(2, p=probs_normalised))
-
-    projector = _MIDDLE_PROJECTORS[outcome]
-    projected = projector @ rho_4q @ projector / probs[outcome]
-    rho_outer = primaryfn.partial_trace(projected, 4, [1, 2])
-    rho_outer = apply_dark_count_mixing(rho_outer, heralding)
-
-    correction = _CORRECTION_OPS[outcome]
-    rho_corrected = correction @ rho_outer @ correction.conj().T
-    return BellSwapResult(rho=rho_corrected, outcome=outcome)
+        projector = _MIDDLE_PROJECTORS[outcome]
+        projected = projector @ rho_4q @ projector / probs[outcome]
+        rho_outer = Q(projected).partial_trace( 4, [1, 2]).state
+        correction = _CORRECTION_OPS[outcome]
+        rho_corrected = correction @ rho_outer @ correction.conj().T
+        
+        rho_dc = heralding_probs.apply(rho_corrected)
+        return BellSwapResult(rho_dc)
 
 
 # ---------------------------------------------------------------------------
@@ -395,30 +391,30 @@ def perform_bell_swap(rho_left_pair: np.ndarray,rho_right_pair: np.ndarray,imper
 @dataclass(frozen=True)
 class EntanglementSource:
     imperfect_bsm: ImperfectBSM
-    heralding: HeraldingStatistics
-    trial_period_s: float
-    source_state_fidelity: float = 1.0
+    heralding_probs: DarkHeralding
+    prep_time_s: float
+    source_state_fidelity: float
 
     def attempt(self, rng: np.random.Generator) -> tuple[float, BellSwapResult]:
-        n_trials = rng.geometric(self.heralding.p_success)
-        wait_time_s = n_trials * self.trial_period_s
+        n_trials = rng.geometric(self.heralding_probs.eta_eff)
+        wait_time_s = n_trials * self.prep_time_s
         Fid=np.random.default_rng().uniform(self.source_state_fidelity,1)
         rho_left = Q.Werner(p=(4*Fid-1)/3)
         Fid=np.random.default_rng().uniform(self.source_state_fidelity,1)
         rho_right = Q.Werner(p=(4*Fid-1)/3)
-        result = perform_bell_swap(rho_left, rho_right, self.imperfect_bsm, self.heralding, rng)
+        result = BellSwapResult.perform(rho_left, rho_right, self.imperfect_bsm, self.heralding_probs, rng)
         return wait_time_s, result
 
 
 @dataclass(frozen=True)
 class EntanglementSwapper:
     imperfect_bsm: ImperfectBSM
-    heralding: HeraldingStatistics
+    heralding_probs: DarkHeralding
     memory_noise: DephasingMemory
 
     def attempt(self, rho_left_pair: np.ndarray, rho_right_pair: np.ndarray, left_wait_time_s: float, 
                 right_wait_time_s: float, rng: np.random.Generator,) -> tuple[bool, BellSwapResult | None]:
-        herald_fires = rng.random() < self.heralding.p_success
+        herald_fires = rng.random() < self.heralding_probs.eta_eff
         if not herald_fires:
             return False, None
 
@@ -427,7 +423,7 @@ class EntanglementSwapper:
         rho_right = self.memory_noise.apply(rho_right_pair, right_wait_time_s, qubit=0)
         rho_right = self.memory_noise.apply(rho_right, right_wait_time_s, qubit=1)
 
-        result = perform_bell_swap(rho_left, rho_right, self.imperfect_bsm, self.heralding, rng)
+        result = BellSwapResult.perform(rho_left, rho_right, self.imperfect_bsm, self.heralding_probs, rng)
         return True, result
 
 
@@ -446,7 +442,7 @@ class MemorySlot:
     owner_node: int
     faces_node: int
     status: SlotStatus = SlotStatus.EMPTY
-    pair: Optional["EntangledPair"] = None
+    pair: EntangledPair | None = None
     retired: bool = False
 
     def is_available_for_new_attempt(self) -> bool:
@@ -460,7 +456,6 @@ class EntangledPair:
     ready_time: float
     left_slot: MemorySlot
     right_slot: MemorySlot
-    consumed_inner_slots: list[MemorySlot] = field(default_factory=list)
 
     @property
     def left_node(self) -> int:
@@ -472,15 +467,15 @@ class EntangledPair:
 
     @property
     def span_hops(self) -> int:
-        return self.right_node - self.left_node
+        return self.right_node - self.left_node   #When hops == total_nodes-1 : It means it spans full chain
 
 
 @dataclass
 class Node:
     index: int
     is_end_node: bool
-    left_slots: list[MemorySlot] = field(default_factory=list)
-    right_slots: list[MemorySlot] = field(default_factory=list)
+    left_slots: list[MemorySlot] = field(default_factory=list)    #List of parallel 'left memory slots'
+    right_slots: list[MemorySlot] = field(default_factory=list)   #List of parallel 'right memory slots'
 
     @property
     def all_slots(self) -> list[MemorySlot]:
@@ -488,22 +483,23 @@ class Node:
 
 
 class RepeaterChain:
-    def __init__(self, n_nodes: int, memories_per_link: int):
-        if n_nodes < 3:
-            raise ValueError("n_nodes must be >= 3 (need at least one repeater)")
-        if memories_per_link < 1:
-            raise ValueError("memories_per_link must be >= 1")
+    def __init__(self, rep_nodes: int, n_parallel_slots: int):
+        if rep_nodes < 1:
+            raise ValueError("rep_nodes must be >= 1 (need at least one repeater)")
+        if n_parallel_slots < 1:
+            raise ValueError("n_parallel_slots must be >= 1")
 
-        self.n_nodes = n_nodes
-        self.memories_per_link = memories_per_link
-        self.nodes: list[Node] = [Node(index=i, is_end_node=(i == 0 or i == n_nodes - 1)) for i in range(n_nodes)]
-        for i in range(n_nodes - 1):
+        self.rep_nodes = rep_nodes
+        self.total_nodes = rep_nodes + 2
+        self.n_parallel_slots = n_parallel_slots
+        self.nodes: list[Node] = [Node(index=i, is_end_node=(i == 0 or i == self.total_nodes - 1)) for i in range(self.total_nodes)]
+        for i in range(self.total_nodes - 1):
             j = i + 1
-            for _ in range(memories_per_link):
-                left_side_slot = MemorySlot(owner_node=i, faces_node=j)
-                right_side_slot = MemorySlot(owner_node=j, faces_node=i)
-                self.nodes[i].right_slots.append(left_side_slot)
-                self.nodes[j].left_slots.append(right_side_slot)
+            for _ in range(n_parallel_slots):
+                ith_slot = MemorySlot(owner_node=i, faces_node=j)
+                jth_slot = MemorySlot(owner_node=j, faces_node=i)
+                self.nodes[i].right_slots.append(ith_slot)
+                self.nodes[j].left_slots.append(jth_slot)
 
         self._next_pair_id = 0
 
@@ -512,19 +508,7 @@ class RepeaterChain:
         return self._next_pair_id
 
     def repeater_indices(self) -> range:
-        return range(1, self.n_nodes - 1)
+        return range(1, self.rep_nodes + 1)
 
-    def link_left_indices(self) -> range:
-        return range(self.n_nodes - 1)
-
-    def total_slots(self) -> int:
-        return sum(len(n.all_slots) for n in self.nodes)
-
-    def occupancy_summary(self) -> dict:
-        counts = {status: 0 for status in SlotStatus}
-        retired = 0
-        for node in self.nodes:
-            for slot in node.all_slots:
-                counts[slot.status] += 1
-                retired += int(slot.retired)
-        return {"by_status": {s.name: c for s, c in counts.items()}, "retired": retired}
+    def links_indices(self) -> range:
+        return range(self.rep_nodes + 1)

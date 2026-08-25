@@ -103,6 +103,41 @@ class Q: # creating objects for quantum states and operators
             raise ValueError("Density matrix can only be computed for pure states (column vectors).")
         return Q(self.state @ self.state.conj().T)
 
+    def partial_trace(self, n_qubits: int, qubits: list[int]): # partial trace
+        """Return density matrix after qubits traced out"""
+        out = self.state
+        n = n_qubits
+        for q in qubits:
+                if not (0 <= q < n_qubits):
+                    raise ValueError(f"qubit {q} out of range for n_qubits={n_qubits}")
+        for q in sorted(qubits, reverse=True):
+            reshaped = out.reshape([2] * (2 * n))
+            traced = np.trace(reshaped, axis1=q, axis2=q + n)
+            dim = 2 ** (n - 1)
+            out = traced.reshape(dim, dim)
+            n -= 1
+        return Q(out)
+    
+    def expand_mixed(self, kept_positions: list[int], total_qubits: int) -> np.ndarray: # expand with maximally mixed
+        """Return density matrix expanded with maximally mixed state."""
+        rho_kept = self.state
+        missing = [q for q in range(total_qubits) if q not in kept_positions]
+        n_missing = len(missing)
+
+        identity_block = np.eye(2**n_missing, dtype=complex)
+        combined = np.kron(rho_kept, identity_block) / (2**n_missing)
+
+        order = list(kept_positions) + missing
+        inverse_order = list(np.argsort(order))
+        row_perm = inverse_order
+        col_perm = [total_qubits + p for p in inverse_order]
+        perm = row_perm + col_perm
+
+        tensor = combined.reshape([2] * (2 * total_qubits))
+        tensor = np.transpose(tensor, perm)
+        dim = 2**total_qubits
+        return Q(tensor.reshape(dim, dim))   
+
     # ----- Random state generators -----
     class rand:
         @staticmethod
@@ -324,40 +359,3 @@ class Ebit:
             return val
         else:
             raise ValueError("Input must be 4x1 ket or 4x4 density matrix.")
-
-# ---------------------------------------------------------------------------
-# Multi-qubit utilities and density matrix validations
-# ---------------------------------------------------------------------------
-
-def partial_trace(rho: np.ndarray, n_qubits: int, qubits: list[int]) -> np.ndarray:
-    out = rho
-    n = n_qubits
-    for q in qubits:
-            if not (0 <= q < n_qubits):
-                raise ValueError(f"qubit {q} out of range for n_qubits={n_qubits}")
-    for q in sorted(qubits, reverse=True):
-        reshaped = out.reshape([2] * (2 * n))
-        traced = np.trace(reshaped, axis1=q, axis2=q + n)
-        dim = 2 ** (n - 1)
-        out = traced.reshape(dim, dim)
-        n -= 1
-    return out
-
-
-def expand_with_maximally_mixed(rho_kept: np.ndarray, kept_positions: list[int], total_qubits: int) -> np.ndarray:
-    missing = [q for q in range(total_qubits) if q not in kept_positions]
-    n_missing = len(missing)
-
-    identity_block = np.eye(2**n_missing, dtype=complex)
-    combined = np.kron(rho_kept, identity_block) / (2**n_missing)
-
-    order = list(kept_positions) + missing
-    inverse_order = list(np.argsort(order))
-    row_perm = inverse_order
-    col_perm = [total_qubits + p for p in inverse_order]
-    perm = row_perm + col_perm
-
-    tensor = combined.reshape([2] * (2 * total_qubits))
-    tensor = np.transpose(tensor, perm)
-    dim = 2**total_qubits
-    return tensor.reshape(dim, dim)
