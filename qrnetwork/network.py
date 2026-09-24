@@ -270,167 +270,10 @@ class QRep:
         else:
             raise ValueError("Incorrect dimensions of the shared state.")
 
-# ---------------------------------------------------------------------------
-# Projectors & Operators for Hardware Models & BSM
-# ---------------------------------------------------------------------------
-_I2 = pauli_corrections[0][0]
-_PAULI_Z = pauli_corrections[0][1]
-_PAULI_X = pauli_corrections[0][2]
-_PAULI_Y = pauli_corrections[0][3]
-
-_RHO_00 = primaryfn.Q([[1],[0],[0],[0]]).dm().state
-_RHO_11 = primaryfn.Q([[0],[0],[0],[1]]).dm().state
-_RHO_PSI_PLUS = primaryfn.Q(bell_states[2]).dm().state
-_RHO_PSI_MINUS = primaryfn.Q(bell_states[3]).dm().state
-_MAX_MIXED_2Q = np.eye(4, dtype=complex) / 4
-
-_PSI_PROJECTORS = (_RHO_PSI_PLUS, _RHO_PSI_MINUS)
-_MIDDLE_PROJECTORS = tuple(np.kron(np.kron(_I2, P), _I2) for P in _PSI_PROJECTORS)
-_CORRECTION_OPS = (np.kron(_I2, _PAULI_X), np.kron(_I2, _PAULI_Y))
-
-
-# ---------------------------------------------------------------------------
-# Noise Models & Bell State Measurement
-# ---------------------------------------------------------------------------
-
-@dataclass(frozen=True)
-class DarkHeralding:
-    eta_eff: float            # effective probability of success
-    p_correct_click: float    # real event | success
-    p_wrong_bell_pair: float  # wrong bell pair | success
-    p_photon_loss: float      # photon lost | success
-
-    def __post_init__(self) -> None:
-        total = self.p_correct_click + self.p_wrong_bell_pair + self.p_photon_loss
-        if not np.isclose(total, 1.0, atol=1e-9):
-            raise ValueError(f"heralding outcome probabilities must sum to 1, got {total}")
-
-    @classmethod
-    def calculate(cls, eta_left: float, eta_right: float, p_dark: float) -> DarkHeralding:
-        both_arrive = eta_left * eta_right
-        only_left = eta_left * (1 - eta_right)
-        only_right = (1 - eta_left) * eta_right
-        neither_arrives = (1 - eta_left) * (1 - eta_right)
-
-        eta_eff = (0.5 * both_arrive * (1 - p_dark) ** 2
-            + 0.5 * both_arrive * 2 * p_dark * (1 - p_dark) ** 2
-            + neither_arrives * 4 * p_dark**2 * (1 - p_dark) ** 2
-            + only_left * 2 * p_dark * (1 - p_dark) ** 2
-            + only_right * 2 * p_dark * (1 - p_dark) ** 2)
-        
-        p_correct_click = (0.5 * both_arrive * (1 - p_dark) ** 2) / eta_eff
-        p_wrong_bell_pair = (0.5 * both_arrive * 2 * p_dark * (1 - p_dark) ** 2) / eta_eff
-        p_photon_loss = 1.0 - p_correct_click - p_wrong_bell_pair
-        return cls(eta_eff, p_correct_click, p_wrong_bell_pair, p_photon_loss)
-
-
-    def apply(self, rho: np.ndarray) -> np.ndarray:
-        return (self.p_correct_click * rho
-            + self.p_wrong_bell_pair * (_RHO_00 + _RHO_11) / 2
-            + self.p_photon_loss * _MAX_MIXED_2Q)
-
-
-@dataclass(frozen=True)
-class DephasingMemory:
-    dephasing_time_s: float
-
-    def dephasing_probability(self, wait_time_s: float) -> float:
-        if wait_time_s < 0:
-            raise ValueError(f"negative memory wait time ({wait_time_s:.3e}s)")
-        exponent = -wait_time_s / self.dephasing_time_s
-        return (1 - np.exp(exponent)) / 2
-
-    def apply(self, rho: np.ndarray, wait_time_s: float, qubit: int) -> np.ndarray:
-        p = self.dephasing_probability(wait_time_s)
-        if p == 0.0:
-            return rho
-        z_op = np.kron(_PAULI_Z, _I2) if qubit == 0 else np.kron(_I2, _PAULI_Z)
-        return (1 - p) * rho + p * (z_op @ rho @ z_op)
-
-
-@dataclass(frozen=True)
-class ImperfectBSM:
-    fidelity: float
-
-    def apply(self, rho_4q: np.ndarray) -> np.ndarray:
-        if self.fidelity >= 1.0:
-            return rho_4q
-        reduced_outer = Q(rho_4q).partial_trace( 4, [1, 2])
-        scrambled = reduced_outer.expand_mixed(kept_positions=[0, 3], total_qubits=4).state
-        return self.fidelity * rho_4q + (1 - self.fidelity) * scrambled
-
-
-@dataclass(frozen=True)
-class BellSwapResult:
-    rho: np.ndarray  
-
-    @classmethod
-    def perform(cls, rho_left_pair: np.ndarray,rho_right_pair: np.ndarray,imperfect_bsm: ImperfectBSM,
-                        heralding_probs: DarkHeralding,rng: np.random.Generator,) -> BellSwapResult:
-        rho_4q = np.kron(rho_left_pair, rho_right_pair)
-        rho_4q = imperfect_bsm.apply(rho_4q)
-        probs = np.clip(np.array([np.trace(P @ rho_4q).real for P in _MIDDLE_PROJECTORS]), 0.0, None)
-        probs_normalised = probs / probs.sum()
-        outcome = int(rng.choice(2, p=probs_normalised))  # 0 -> psi+ heralded, 1 -> psi- heralded
-
-        projector = _MIDDLE_PROJECTORS[outcome]
-        projected = projector @ rho_4q @ projector / probs[outcome]
-        rho_outer = Q(projected).partial_trace( 4, [1, 2]).state
-        correction = _CORRECTION_OPS[outcome]
-        rho_corrected = correction @ rho_outer @ correction.conj().T
-        
-        rho_dc = heralding_probs.apply(rho_corrected)
-        return BellSwapResult(rho_dc)
-
-
-# ---------------------------------------------------------------------------
-# Link Generation and Swappers
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class EntanglementSource:
-    imperfect_bsm: ImperfectBSM
-    heralding_probs: DarkHeralding
-    prep_time_s: float
-    source_state_fidelity: float
-
-    def attempt(self, rng: np.random.Generator) -> tuple[float, BellSwapResult]:
-        n_trials = rng.geometric(self.heralding_probs.eta_eff)
-        wait_time_s = n_trials * self.prep_time_s
-        Fid=np.random.default_rng().uniform(self.source_state_fidelity,1)
-        rho_left = Q.Werner(p=(4*Fid-1)/3)
-        Fid=np.random.default_rng().uniform(self.source_state_fidelity,1)
-        rho_right = Q.Werner(p=(4*Fid-1)/3)
-        result = BellSwapResult.perform(rho_left, rho_right, self.imperfect_bsm, self.heralding_probs, rng)
-        return wait_time_s, result
-
-
-@dataclass(frozen=True)
-class EntanglementSwapper:
-    imperfect_bsm: ImperfectBSM
-    heralding_probs: DarkHeralding
-    memory_noise: DephasingMemory
-
-    def attempt(self, rho_left_pair: np.ndarray, rho_right_pair: np.ndarray, left_wait_time_s: float, 
-                right_wait_time_s: float, rng: np.random.Generator,) -> tuple[bool, BellSwapResult | None]:
-        herald_fires = rng.random() < self.heralding_probs.eta_eff
-        if not herald_fires:
-            return False, None
-
-        rho_left = self.memory_noise.apply(rho_left_pair, left_wait_time_s, qubit=0)
-        rho_left = self.memory_noise.apply(rho_left, left_wait_time_s, qubit=1)
-        rho_right = self.memory_noise.apply(rho_right_pair, right_wait_time_s, qubit=0)
-        rho_right = self.memory_noise.apply(rho_right, right_wait_time_s, qubit=1)
-
-        result = BellSwapResult.perform(rho_left, rho_right, self.imperfect_bsm, self.heralding_probs, rng)
-        return True, result
-
 
 # ---------------------------------------------------------------------------
 # Chain Topology & Memory Slots
 # ---------------------------------------------------------------------------
-
 class SlotStatus(Enum):
     EMPTY = auto()
     PENDING = auto()
@@ -439,35 +282,26 @@ class SlotStatus(Enum):
 
 @dataclass
 class MemorySlot:
-    owner_node: int
-    faces_node: int
+    owner_node: Node
+    faces_node: Node
     status: SlotStatus = SlotStatus.EMPTY
-    pair: EntangledPair | None = None
-    retired: bool = False
-
-    def is_available_for_new_attempt(self) -> bool:
-        return self.status is SlotStatus.EMPTY and not self.retired
+    link: Link | None = None
 
 
 @dataclass
-class EntangledPair:
-    id: int
-    rho: np.ndarray
+class Link:
+    rho: Q
     ready_time: float
     left_slot: MemorySlot
     right_slot: MemorySlot
 
     @property
-    def left_node(self) -> int:
+    def left_node(self) -> Node:
         return self.left_slot.owner_node
 
     @property
-    def right_node(self) -> int:
+    def right_node(self) -> Node:
         return self.right_slot.owner_node
-
-    @property
-    def span_hops(self) -> int:
-        return self.right_node - self.left_node   #When hops == total_nodes-1 : It means it spans full chain
 
 
 @dataclass
@@ -476,10 +310,6 @@ class Node:
     is_end_node: bool
     left_slots: list[MemorySlot] = field(default_factory=list)    #List of parallel 'left memory slots'
     right_slots: list[MemorySlot] = field(default_factory=list)   #List of parallel 'right memory slots'
-
-    @property
-    def all_slots(self) -> list[MemorySlot]:
-        return self.left_slots + self.right_slots
 
 
 class RepeaterChain:
@@ -490,22 +320,18 @@ class RepeaterChain:
             raise ValueError("n_parallel_slots must be >= 1")
 
         self.rep_nodes = rep_nodes
-        self.total_nodes = rep_nodes + 2
         self.n_parallel_slots = n_parallel_slots
-        self.nodes: list[Node] = [Node(index=i, is_end_node=(i == 0 or i == self.total_nodes - 1)) for i in range(self.total_nodes)]
-        for i in range(self.total_nodes - 1):
+        self.nodes: list[Node] = [Node(index=i, is_end_node=(i == 0 or i == self.rep_nodes + 1)) for i in self.nodes_indices()]
+        for i in self.links_indices():
             j = i + 1
             for _ in range(n_parallel_slots):
-                ith_slot = MemorySlot(owner_node=i, faces_node=j)
-                jth_slot = MemorySlot(owner_node=j, faces_node=i)
-                self.nodes[i].right_slots.append(ith_slot)
-                self.nodes[j].left_slots.append(jth_slot)
+                ith_mem = MemorySlot(owner_node= self.nodes[i], faces_node= self.nodes[j])
+                jth_mem = MemorySlot(owner_node=self.nodes[j], faces_node=self.nodes[i])
+                self.nodes[i].right_slots.append(ith_mem)
+                self.nodes[j].left_slots.append(jth_mem)
 
-        self._next_pair_id = 0
-
-    def new_pair_id(self) -> int:
-        self._next_pair_id += 1
-        return self._next_pair_id
+    def nodes_indices(self) -> range:
+        return range(self.rep_nodes + 2)
 
     def repeater_indices(self) -> range:
         return range(1, self.rep_nodes + 1)
