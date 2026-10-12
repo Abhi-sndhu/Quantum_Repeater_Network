@@ -18,6 +18,40 @@ class Q: # creating objects for quantum states and operators
         arr = self.state
         return arr if dtype is None else arr.astype(dtype)
 
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs): 
+        # Added because matrix multiplication was giving numpy array when first operand is numpy array and second is Q object. Now it will return Q object.
+        # However, it was working fine when first operand is Q object and second is numpy array.
+        if method != "__call__":
+            return NotImplemented
+        # Unwrap any Q operands to raw ndarrays
+        raw_inputs = [x.state if isinstance(x, Q) else x for x in inputs]
+        out = kwargs.get("out", None)
+        if out is not None:
+            kwargs["out"] = tuple(
+                o.state if isinstance(o, Q) else o for o in out
+            )
+        result = getattr(ufunc, method)(*raw_inputs, **kwargs)
+        if isinstance(result, np.ndarray):
+            return Q(result)
+        if isinstance(result, tuple):
+            return tuple(Q(r) if isinstance(r, np.ndarray) else r for r in result)
+        return result
+
+    def __getitem__(self, key):
+        result = self.state[key]
+        # Return a Q if it's still array-like, plain scalar otherwise
+        if isinstance(result, np.ndarray):
+            return Q(result)
+        return result
+
+    def __setitem__(self, key, value):
+        if isinstance(value, Q):
+            value = value.state
+        self.state[key] = value
+
+    def __len__(self):
+        return len(self.state)
+
     def __repr__(self):
         return f"Q(\n{self.state}\n)"
 
@@ -61,9 +95,9 @@ class Q: # creating objects for quantum states and operators
             return Q(self.state / other)
         raise TypeError("Division is only defined by a scalar.")
 
-    def __matmul__(self, other): # Matrix Multiplication (@)
+    def __matmul__(self, other):
         if isinstance(other, Q):
-            return Q(self.state @ other.state)
+            other = other.state
         return Q(self.state @ other)
 
     def item(self):
@@ -147,51 +181,51 @@ class Q: # creating objects for quantum states and operators
             rho /= np.trace(rho)
             return Q(rho)
     
-    # ----- Bell states -----
-    class Bell:
-        phi_plus = np.array([[1], [0], [0], [1]], dtype=complex) / np.sqrt(2)
-        phi_minus = np.array([[1], [0], [0], [-1]], dtype=complex) / np.sqrt(2)
-        psi_plus = np.array([[0], [1], [1], [0]], dtype=complex) / np.sqrt(2)
-        psi_minus = np.array([[0], [1], [-1], [0]], dtype=complex) / np.sqrt(2)
+# ----- Bell states -----
+class Bell:
+    phi_plus = Q(np.array([[1], [0], [0], [1]], dtype=complex) / np.sqrt(2))
+    phi_minus = Q(np.array([[1], [0], [0], [-1]], dtype=complex) / np.sqrt(2))
+    psi_plus = Q(np.array([[0], [1], [1], [0]], dtype=complex) / np.sqrt(2))
+    psi_minus = Q(np.array([[0], [1], [-1], [0]], dtype=complex) / np.sqrt(2))
 
-        @classmethod
-        def all(cls):
-            """
-            Return all four Bell states as a dictionary.
-            Usage: Q.Bell.all()
-            """
-            return {
-                'phi_plus': cls.phi_plus,
-                'phi_minus': cls.phi_minus,
-                'psi_plus': cls.psi_plus,
-                'psi_minus': cls.psi_minus
-            }
-        
-    class Pauli:
-        I = np.eye(2, dtype=complex)
-        X = np.array([[0, 1], [1, 0]], dtype=complex)
-        Y = np.array([[0, -1j], [1j, 0]], dtype=complex)
-        Z = np.array([[1, 0], [0, -1]], dtype=complex)
-        @classmethod
-        def all(cls):
-            return {
-                'PauliI': cls.I,
-                'PauliX': cls.X,
-                'PauliY': cls.Y,
-                'PauliZ': cls.Z
-            }
-        
-    class Werner:
-        def __new__(cls, p=None, state=None):
-            if state is None:
-                state = Q.Bell.phi_plus
-            bell_pure = state @ state.conj().T
-            I4 = np.eye(4) / 4
-            if p is None:
-                p = np.random.uniform(low=1/2, high=1.0)
-            # If p is provided, use it directly
-            return Q(p * bell_pure + (1 - p) * I4)
-
+    @classmethod
+    def all(cls):
+        """
+        Return all four Bell states as a dictionary.
+        Usage: Q.Bell.all()
+        """
+        return {
+            'phi_plus': cls.phi_plus,
+            'phi_minus': cls.phi_minus,
+            'psi_plus': cls.psi_plus,
+            'psi_minus': cls.psi_minus
+        }
+Q.Bell = Bell  # Attach Bell class to Q for easy access
+class Pauli:
+    I = Q(np.eye(2, dtype=complex))
+    X = Q(np.array([[0, 1], [1, 0]], dtype=complex))
+    Y = Q(np.array([[0, -1j], [1j, 0]], dtype=complex))
+    Z = Q(np.array([[1, 0], [0, -1]], dtype=complex))
+    @classmethod
+    def all(cls):
+        return {
+            'PauliI': cls.I,
+            'PauliX': cls.X,
+            'PauliY': cls.Y,
+            'PauliZ': cls.Z
+        }
+Q.Pauli = Pauli  # Attach Pauli class to Q for easy access    
+class Werner:
+    def __new__(cls, p=None, state=None):
+        if state is None:
+            state = Q.Bell.phi_plus
+        bell_pure = state @ state.conj().T
+        I4 = np.eye(4) / 4
+        if p is None:
+            p = np.random.uniform(low=1/2, high=1.0)
+        # If p is provided, use it directly
+        return Q(p * bell_pure + (1 - p) * I4)
+Q.Werner = Werner  # Attach Werner class to Q for easy access
 
 class Is:
     def __init__(self, state, tol=1e-10, auto_normalize=True):

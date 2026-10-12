@@ -6,11 +6,15 @@ from qrnetwork import *
 ## Define quantum states
 # ket0 = Q([[1], [0]])
 # print(ket0)
-# ket1 = Q([[0], [1]])
-# print(ket1)
+# ket0 = np.array([[1,0],[0,1]], dtype=complex)
+# ket1 = Q([[0], [1]]).dm()
+# print(ket0 @ ket1)  
 
+X = [Q.Pauli.X, Q.Pauli.Y, Q.Pauli.Z]
+X[0][0, 0] = 3
+print(X)
 ## Density matrix
-# qC = Q(Q.Bell.phi_plus).dm()
+# qC = Q.Bell.phi_plus.dm()
 # qC = Q([[1], [0], [0], [1]]).dm()
 # print(qC)
 
@@ -46,7 +50,7 @@ from qrnetwork import *
 # Q.Bell.all()
 # bell_states= [Q.Bell.phi_plus, Q.Bell.phi_minus, Q.Bell.psi_plus, Q.Bell.psi_minus]
 # print(bell_states)
-# print(phi_minus)
+# print(phi_plus)
 
 ## Print Pauli operations
 # X = Q.Pauli.X
@@ -95,11 +99,11 @@ from qrnetwork import *
 # print(results)
 
 ## Get output of linear quantum repeater network without noise
-shared_ent_state = [Qp(Q.Bell.psi_plus).op(),Qp(Q.Bell.phi_minus).op(),
-                    Qp(Q.Bell.phi_plus).op(),Qp(Q.Bell.psi_plus).op(), 
-                    Qp(Q.Bell.phi_minus).op()]
+# shared_ent_state = [Qp(Q.Bell.psi_plus).op(),Qp(Q.Bell.phi_minus).op(),
+#                     Qp(Q.Bell.phi_plus).op(),Qp(Q.Bell.psi_plus).op(), 
+#                     Qp(Q.Bell.phi_minus).op()]
 # shared_ent_state = [Q.Bell.psi_plus,Q.Bell.psi_minus,Q.Bell.phi_plus,Q.Bell.phi_minus,Q.Bell.psi_plus]
-results = QRep(shared_ent_state).linear()
+# results = QRep(shared_ent_state).linear()
 ## Get output of linear quantum repeater network with noise
 # start_time = time.time()
 # results = QRep(shared_ent_state).noise(L=40, T_p= 1e-6, T_dp = 1, eta = 0.3, p_d = 1e-8).linear()
@@ -109,4 +113,4 @@ results = QRep(shared_ent_state).linear()
 # print(f"Results: {results}\n Execution time: {elapsed_time} seconds")
 
 ## Print output
-print(results)
+# print(results)
