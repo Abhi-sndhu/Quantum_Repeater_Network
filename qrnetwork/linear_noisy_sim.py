@@ -7,7 +7,7 @@ import numpy as np
 
 from . import Q,Qp
 from .network import (Link,MemorySlot,RepeaterChain,SlotStatus)
-from .emanager import(EntGenSource,RepSwap,Noise)
+from .ent_manager import(EntGenSource,RepSwap,Noise)
 
 # ---------------------------------------------------------------------------
 # Configuration

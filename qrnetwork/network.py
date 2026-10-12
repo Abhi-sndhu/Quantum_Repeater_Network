@@ -118,8 +118,6 @@ class eswap:
             if norm == 0:
                 continue
             obtained_state = post_meas / norm
-            # enforce Hermiticity & normalization
-            obtained_state = (obtained_state + primaryfn.Q(obtained_state).d()) / 2
             obtained_state = obtained_state / np.trace(obtained_state)
             fidelity = primaryfn.Qp(desired_state, obtained_state).fid()
             results.append({"measurement_outcome": f"Bell-{i+1}",
@@ -141,17 +139,9 @@ class eswap:
                        for k1 in K for k2 in K]
         rho1 = sum(K @ rhoin @ primaryfn.Q(K).d() for K in kraus_op_2q) 
         rho1 = rho1 / np.trace(rho1)
-        # --- Dephasing ---
-        lam_t = dephasing_coeff(T_p, T_dp, L)
-        # lam_t_coeff1 = (1 - lam_t) * np.eye(16)
-        # lam_t_coeff2 = (np.kron(np.kron(np.eye(2), 
-        #                                         np.kron(primaryfn.Q.Pauli.Z, primaryfn.Q.Pauli.Z)), 
-        #                                         np.eye(2)))
-        # rho2 = (1 - lam_t) * rho1 + \
-        #        lam_t * (lam_t_coeff2 @ rho1 @ primaryfn.Q(lam_t_coeff2).d())
-        # rho2 = rho2 / np.trace(rho2)
 
         # --- Successive Dephasing Channels --- # Noise modelled only for 2nd and 3rd qubit
+        lam_t = dephasing_coeff(T_p, T_dp, L)
         # For 2nd qubit
         lam_t_coeff2 = np.kron( np.kron(np.eye(2),Q.Pauli.Z), np.eye(4))
         rho2a = (1 - lam_t) * rho1 + lam_t * (lam_t_coeff2 @ rho1 @ primaryfn.Q(lam_t_coeff2).d())
@@ -182,8 +172,6 @@ class eswap:
             if norm == 0:
                 continue
             obtained_state = post_meas / norm
-            # enforce Hermiticity & normalization
-            # obtained_state = (obtained_state + primaryfn.Q(obtained_state).d()) / 2
             obtained_state = obtained_state / np.trace(obtained_state)
             fidelity = primaryfn.Qp(desired_state, obtained_state).fid()
             results.append({"measurement_outcome": f"Bell-{i+1}",

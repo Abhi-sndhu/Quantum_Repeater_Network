@@ -293,7 +293,7 @@ class Qp:
         # Case 1: both are pure states (kets)
         if Is(self.state1).ket() and Is(self.state2).ket():
             value = self.ip()  # <psi|phi>
-            fidelity = np.abs(value).item()
+            fidelity = (np.abs(value).item())**2
             return round(fidelity, 4)
 
         # Case 2: both are density matrices
@@ -307,11 +307,9 @@ class Qp:
         # Case 3: one pure, one mixed
         elif Is(self.state1).ket() and Is(self.state2).square():
             fidelity = np.abs((Q(self.state1).d() @ self.state2 @ self.state1).item())
-            # fidelity = np.sqrt(fidelity)
             return round(fidelity, 4)
         elif Is(self.state1).square() and Is(self.state2).ket():
             fidelity = np.abs((Q(self.state2).d() @ self.state1 @ self.state2).item())
-            # fidelity = np.sqrt(fidelity)
             return round(fidelity, 4)
         else:
             raise ValueError("Unsupported input types for fidelity.")
