@@ -144,12 +144,23 @@ class eswap:
         # --- Dephasing ---
         lam_t = dephasing_coeff(T_p, T_dp, L)
         # lam_t_coeff1 = (1 - lam_t) * np.eye(16)
-        lam_t_coeff2 = (np.kron(np.kron(np.eye(2), 
-                                                np.kron(primaryfn.Q.Pauli.Z, primaryfn.Q.Pauli.Z)), 
-                                                np.eye(2)))
-        rho2 = (1 - lam_t) * rho1 + \
-               lam_t * (lam_t_coeff2 @ rho1 @ primaryfn.Q(lam_t_coeff2).d())
-        rho2 = rho2 / np.trace(rho2)
+        # lam_t_coeff2 = (np.kron(np.kron(np.eye(2), 
+        #                                         np.kron(primaryfn.Q.Pauli.Z, primaryfn.Q.Pauli.Z)), 
+        #                                         np.eye(2)))
+        # rho2 = (1 - lam_t) * rho1 + \
+        #        lam_t * (lam_t_coeff2 @ rho1 @ primaryfn.Q(lam_t_coeff2).d())
+        # rho2 = rho2 / np.trace(rho2)
+
+        # --- Successive Dephasing Channels --- # Noise modelled only for 2nd and 3rd qubit
+        # For 2nd qubit
+        lam_t_coeff2 = np.kron( np.kron(np.eye(2),Q.Pauli.Z), np.eye(4))
+        rho2a = (1 - lam_t) * rho1 + lam_t * (lam_t_coeff2 @ rho1 @ primaryfn.Q(lam_t_coeff2).d())
+        rho2b = rho2a / np.trace(rho2a)
+        # For 3rd qubit
+        lam_t_coeff3 = np.kron( np.kron(np.eye(4),Q.Pauli.Z), np.eye(2))
+        rho2c = (1 - lam_t) * rho2b + lam_t * (lam_t_coeff3 @ rho2b @ primaryfn.Q(lam_t_coeff3).d())
+        rho2 = rho2c / np.trace(rho2c)
+        
         # --- Detector noise (clicking) ---
         alpha = clicking_coeff(eta, p_d)
         # alpha_coeff1 = alpha * np.eye(16)
@@ -172,7 +183,7 @@ class eswap:
                 continue
             obtained_state = post_meas / norm
             # enforce Hermiticity & normalization
-            obtained_state = (obtained_state + primaryfn.Q(obtained_state).d()) / 2
+            # obtained_state = (obtained_state + primaryfn.Q(obtained_state).d()) / 2
             obtained_state = obtained_state / np.trace(obtained_state)
             fidelity = primaryfn.Qp(desired_state, obtained_state).fid()
             results.append({"measurement_outcome": f"Bell-{i+1}",

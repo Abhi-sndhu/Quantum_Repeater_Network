@@ -99,7 +99,9 @@ shared_ent_state = [Qp(Q.Bell.psi_plus).op(),Qp(Q.Bell.phi_minus).op(),
                     Qp(Q.Bell.phi_plus).op(),Qp(Q.Bell.psi_plus).op(), 
                     Qp(Q.Bell.phi_minus).op()]
 # shared_ent_state = [Q.Bell.psi_plus,Q.Bell.psi_minus,Q.Bell.phi_plus,Q.Bell.phi_minus,Q.Bell.psi_plus]
-results = QRep(shared_ent_state).linear()
+Rep = QRep(shared_ent_state)
+noise = Rep.noise(L=10, T_p=1e-8, T_dp=1e-5, eta=0.3, p_d=1e-8)
+results = Rep.linear()
 ## Get output of linear quantum repeater network with noise
 # start_time = time.time()
 # results = QRep(shared_ent_state).noise(L=40, T_p= 1e-6, T_dp = 1, eta = 0.3, p_d = 1e-8).linear()
@@ -110,3 +112,8 @@ results = QRep(shared_ent_state).linear()
 
 ## Print output
 print(results)
+
+# Noisy Eswap Model
+# noise_init = eswap(Qp(Q.Bell.psi_plus).op(),Qp(Q.Bell.phi_minus).op())
+# res=noise_init.noise(L=10, T_p=1e-8, T_dp=1e-5, eta=0.3, p_d=1e-8)
+# print(res[0])
