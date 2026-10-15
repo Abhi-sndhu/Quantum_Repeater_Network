@@ -134,17 +134,18 @@ class eswap:
         K = amp_damp_kraus(gamma)
         kraus_op_2q = [np.kron(np.kron(np.kron(np.eye(2), k1), k2), np.eye(2))
                        for k1 in K for k2 in K]
-        rho1 = sum(K @ rhoin @ primaryfn.Q(K).d() for K in kraus_op_2q) 
+        rho1 = sum(primaryfn.Q(K) @ rhoin @ primaryfn.Q(K).d() for K in kraus_op_2q) 
         rho1 = rho1 / np.trace(rho1)
         # --- Dephasing ---
         lam_t = dephasing_coeff(T_p, T_dp, L)
-        # lam_t_coeff1 = (1 - lam_t) * np.eye(16)
-        lam_t_coeff2 = (np.kron(np.kron(np.eye(2), 
-                                                np.kron(primaryfn.Q.Pauli.Z, primaryfn.Q.Pauli.Z)), 
-                                                np.eye(2)))
-        rho2 = (1 - lam_t) * rho1 + \
-               lam_t * (lam_t_coeff2 @ rho1 @ primaryfn.Q(lam_t_coeff2).d())
-        rho2 = rho2 / np.trace(rho2)
+        # For 2nd qubit
+        lam_t_coeff2 = np.kron( np.kron(np.eye(2),primaryfn.Q.Pauli.Z), np.eye(4))
+        rho2a = (1 - lam_t) * rho1 + lam_t * (lam_t_coeff2 @ rho1 @ primaryfn.Q(lam_t_coeff2).d())
+        rho2b = rho2a / np.trace(rho2a)
+        # For 3rd qubit
+        lam_t_coeff3 = np.kron( np.kron(np.eye(4),primaryfn.Q.Pauli.Z), np.eye(2))
+        rho2c = (1 - lam_t) * rho2b + lam_t * (lam_t_coeff3 @ rho2b @ primaryfn.Q(lam_t_coeff3).d())
+        rho2 = rho2c / np.trace(rho2c)
         # --- Detector noise (clicking) ---
         alpha = clicking_coeff(eta, p_d)
         # alpha_coeff1 = alpha * np.eye(16)

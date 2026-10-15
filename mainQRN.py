@@ -4,16 +4,18 @@ from qrnetwork import *
 # from qrnetwork import Q, Qp, Is, Ebit, Teleport, Qrep
 
 ## Define quantum states
-# ket0 = Q([[1], [0]])
+ket0 = Q([[1], [0]])
 # print(ket0)
 # ket0 = np.array([[1,0],[0,1]], dtype=complex)
-# ket1 = Q([[0], [1]]).dm()
+# ket1 = Q([[0], [1]])
 # print(ket0 @ ket1)  
 
-X = [Q.Pauli.X, Q.Pauli.Y, Q.Pauli.Z]
-X[0][0, 0] = 3
-print(X)
-## Density matrix
+# X = [Q.Pauli.X, Q.Pauli.Y, Q.Pauli.Z]
+# X[0][0, 0] = 3
+# a = Q.Bell.phi_plus
+# b = [a.copy() for i in range(5)]
+print((ket0.dm()).expand_mixed([0],2))## Density matrix
+# print(StarProtocol.piecemaker(3))
 # qC = Q.Bell.phi_plus.dm()
 # qC = Q([[1], [0], [0], [1]]).dm()
 # print(qC)
@@ -106,7 +108,7 @@ print(X)
 # results = QRep(shared_ent_state).linear()
 ## Get output of linear quantum repeater network with noise
 # start_time = time.time()
-# results = QRep(shared_ent_state).noise(L=40, T_p= 1e-6, T_dp = 1, eta = 0.3, p_d = 1e-8).linear()
+# results = QRep(shared_ent_state).noise(L=20, T_p= 1e-8, T_dp = 1, eta = 0.3, p_d = 1e-8).linear()
 # results = QRep(shared_ent_state).noise(L=40, T_p= 1e-6, T_dp = 1, eta = 0.3, p_d = 1e-8, loss=0.8).linear()
 # end_time = time.time() 
 # elapsed_time = end_time - start_time

@@ -2,6 +2,7 @@ from .primaryfn import Q, Qp, Is, Ebit
 from .qteleportation import Teleport
 from .qchannel import QChannel
 from .network import eswap, QRep
+from .star_protocol import StarProtocol
 
 
 # Define dagger for conjugate transpose (Hermitian adjoint) of an array or matrix

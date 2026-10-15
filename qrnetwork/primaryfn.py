@@ -72,6 +72,10 @@ class Q: # creating objects for quantum states and operators
         if isinstance(other, Q):
             return Q(self.state + other.state)
         return Q(self.state + other)
+    def __radd__(self, other):  # Right-side addition, needed for sum()
+        if other == 0:          # sum() starts with the int 0
+            return self
+        return Q(other + self.state)
         
     def __sub__(self, other): #Subtraction (-)
         if isinstance(other, Q):
@@ -137,6 +141,76 @@ class Q: # creating objects for quantum states and operators
             raise ValueError("Density matrix can only be computed for pure states (column vectors).")
         return Q(self.state @ self.state.conj().T)
 
+    def tr(self):
+        """Compute the matrix trace Tr(A) of the quantum object.
+
+        Returns a complex scalar (or float if purely real).
+        """
+        r, c = self.state.shape
+        if r != c:
+            raise ValueError("Trace is only defined for square operators.")
+        trace_val = np.trace(self.state)
+        # Return clean float if imaginary part is negligible
+        return (
+            float(np.real(trace_val))
+            if np.isclose(np.imag(trace_val), 0, atol=1e-10)
+            else complex(trace_val)
+        )
+    def ptr(self, qubits: list[int]):  # partial trace
+        """Return density matrix after qubits traced out"""
+        state = self.state
+        n_qubits = int( np.log2(self.state.shape[0]) )
+        n = n_qubits
+        for q in qubits:
+                if not (0 <= q < n_qubits):
+                    raise ValueError(f"qubit {q} out of range for n_qubits={n_qubits}")
+        for q in sorted(qubits, reverse=True):
+            reshaped = state.reshape([2] * (2 * n))
+            traced = np.trace(reshaped, axis1=q, axis2=q + n)
+            dim = 2 ** (n - 1)
+            state = traced.reshape(dim, dim)
+            n -= 1
+        return Q(state)
+    
+    def expand_mixed(self, kept_positions: list[int], total_qubits: int): # expand with maximally mixed
+        """Return density matrix expanded with maximally mixed state."""
+        rho_kept = self.state
+        missing = [q for q in range(total_qubits) if q not in kept_positions]
+        n_missing = len(missing)
+
+        identity_block = np.eye(2**n_missing, dtype=complex)
+        combined = np.kron(rho_kept, identity_block) / (2**n_missing)   # [0,3,1,2,4,7,5,6] -> [0,1,2,3,4,5,6,7]]
+
+        order = list(kept_positions) + missing                 # [0,3,1,2]
+        inverse_order = list(np.argsort(order))                # [0,2,3,1]
+        row_perm = inverse_order                               # [0,2,3,1]
+        col_perm = [total_qubits + p for p in inverse_order]   # [4,6,7,5]
+        perm = row_perm + col_perm                             # [0,2,3,1,4,6,7,5]
+
+        tensor = combined.reshape([2] * (2 * total_qubits))    # [0,3,1,2,4,7,5,6] (change according to [0,2,3,1,4,6,7,5])
+        tensor = np.transpose(tensor, perm)                    # [0,1,2,3,4,5,6,7]
+        dim = 2**total_qubits
+        return Q(tensor.reshape(dim, dim))   
+    
+    def copy(self):
+            """Returns an independent deep copy of the quantum object."""
+            return Q(self.state.copy())
+    
+    # ----- Basis State Generator -----
+    @staticmethod
+    def basis(dim, index=0):
+        """Generates computational basis ket |index> of dimension dim.
+    
+            Usage: Q.basis(2, 0) for |0>, Q.basis(2, 1) for |1>
+            """
+        if not (0 <= index < dim):
+            raise ValueError(
+                f"Index {index} out of range for dimension {dim}."
+            )
+        vec = np.zeros((dim, 1), dtype=complex)
+        vec[index, 0] = 1.0
+        return Q(vec)
+
     # ----- Random state generators -----
     class rand:
         @staticmethod
@@ -180,6 +254,92 @@ class Q: # creating objects for quantum states and operators
             rho = Z @ Z.conj().T
             rho /= np.trace(rho)
             return Q(rho)
+    # ============================================================
+    # General controlled single-qubit gate
+    # ============================================================
+    class Cops:
+        @staticmethod
+        def Cg(gate, n_qubits, control, target):
+            if control == target:
+                raise ValueError(
+                    "Control and target qubits must be different."
+                )
+
+            if not (0 <= control < n_qubits):
+                raise ValueError("Control qubit index out of range.")
+
+            if not (0 <= target < n_qubits):
+                raise ValueError("Target qubit index out of range.")
+
+            gate_arr = gate.state if isinstance(gate, Q) else gate
+            dim = 2**n_qubits
+            result = np.zeros((dim, dim), dtype=complex)
+
+            for basis_idx in range(dim):
+                bits = [
+                    (basis_idx >> (n_qubits - 1 - i)) & 1
+                    for i in range(n_qubits)
+                ]
+                if bits[control] == 0:
+                    result[basis_idx, basis_idx] = 1
+                else:
+                    for t in range(2):
+                        new_bits = bits.copy()
+                        new_bits[target] = t
+                        new_basis = 0
+                        for b in new_bits:
+                            new_basis = (new_basis << 1) | b
+                        result[new_basis, basis_idx] = gate_arr[
+                            t, bits[target]
+                        ]
+
+            return Q(result)
+
+        @staticmethod
+        def Cx(n_qubits, control, target):
+            return Q.Cops.Cg(Q.Pauli.X, n_qubits, control, target)
+
+        @staticmethod
+        def Cy(n_qubits, control, target):
+            return Q.Cops.Cg(Q.Pauli.Y, n_qubits, control, target)
+
+        @staticmethod
+        def Cz(n_qubits, control, target):
+            return Q.Cops.Cg(Q.Pauli.Z, n_qubits, control, target)
+
+    # ============================================================
+    # General SWAP gate
+    # ============================================================
+    @staticmethod
+    def SWAP(n_qubits, qubit1, qubit2):
+        if qubit1 == qubit2:
+            raise ValueError("The two qubits must be different.")
+
+        if not (0 <= qubit1 < n_qubits):
+            raise ValueError("qubit1 index out of range.")
+
+        if not (0 <= qubit2 < n_qubits):
+            raise ValueError("qubit2 index out of range.")
+
+        dim = 2**n_qubits
+        swap = np.zeros((dim, dim), dtype=complex)
+
+        for basis_idx in range(dim):
+            bits = [
+                (basis_idx >> (n_qubits - 1 - i)) & 1 for i in range(n_qubits)
+            ]
+            swapped_bits = bits.copy()
+            swapped_bits[qubit1], swapped_bits[qubit2] = (
+                swapped_bits[qubit2],
+                swapped_bits[qubit1],
+            )
+            new_basis = 0
+            for bit in swapped_bits:
+                new_basis = (new_basis << 1) | bit
+            swap[new_basis, basis_idx] = 1
+
+        return Q(swap) 
+
     
 # ----- Bell states -----
 class Bell:
@@ -201,6 +361,19 @@ class Bell:
             'psi_minus': cls.psi_minus
         }
 Q.Bell = Bell  # Attach Bell class to Q for easy access
+
+class Werner:
+    def __new__(cls, p=None, state=None):
+        if state is None:
+            state = Q.Bell.phi_plus
+        bell_pure = state @ state.conj().T
+        I4 = np.eye(4) / 4
+        if p is None:
+            p = np.random.uniform(low=1/2, high=1.0)
+        # If p is provided, use it directly
+        return Q(p * bell_pure + (1 - p) * I4)
+Q.Werner = Werner  # Attach Werner class to Q for easy access
+
 class Pauli:
     I = Q(np.eye(2, dtype=complex))
     X = Q(np.array([[0, 1], [1, 0]], dtype=complex))
@@ -214,18 +387,17 @@ class Pauli:
             'PauliY': cls.Y,
             'PauliZ': cls.Z
         }
-Q.Pauli = Pauli  # Attach Pauli class to Q for easy access    
-class Werner:
-    def __new__(cls, p=None, state=None):
-        if state is None:
-            state = Q.Bell.phi_plus
-        bell_pure = state @ state.conj().T
-        I4 = np.eye(4) / 4
-        if p is None:
-            p = np.random.uniform(low=1/2, high=1.0)
-        # If p is provided, use it directly
-        return Q(p * bell_pure + (1 - p) * I4)
-Q.Werner = Werner  # Attach Werner class to Q for easy access
+Q.Pauli = Pauli  # Attach Pauli class to Q for easy access  
+
+class Gate:
+        H = Q((1 / np.sqrt(2)) * np.array([[1, 1], [1, -1]], dtype=complex))
+        S = Q(np.array([[1, 0], [0, 1j]], dtype=complex))
+        T = Q(np.array([[1, 0], [0, np.exp(1j * np.pi / 4)]], dtype=complex))
+        #CNOT gate
+        CX = Q(np.kron((Pauli.I + Pauli.Z) / 2 , Pauli.I) + np.kron((Pauli.I - Pauli.Z) / 2 , Pauli.X))
+Q.Gate = Gate
+
+
 
 class Is:
     def __init__(self, state, tol=1e-10, auto_normalize=True):
@@ -263,10 +435,26 @@ class Is:
             raise ValueError("Given quantum state is neither ket vector nor density matrix.")
         
 class Qp:
-    def __init__(self, state1, state2=None, tol=1e-10):
-        self.state1 = np.array(state1, dtype=complex)
-        self.state2 = np.array(state2, dtype=complex) if state2 is not None else self.state1
+    def __init__(self, *states, tol=1e-10):
+        # Handle the case where a single list or tuple of states is passed
+        if len(states) == 1 and isinstance(states[0], (list, tuple)):
+            states = states[0]
+
+        if len(states) == 0:
+            raise ValueError("Qp requires at least one state.")
+
+        # Ensure all inputs are initialized as Q objects (converting if necessary)
+        self.q_objs = [
+            item if isinstance(item, Q) else Q(item) for item in states
+        ]
         self.tol = tol
+
+        # Backward compatibility for .op() and other legacy functions:
+        # Extract the underlying data arrays from the first two Q objects
+        self.state1 = self.q_objs[0].state
+        self.state2 = (
+            self.q_objs[1].state if len(self.q_objs) > 1 else self.state1
+        )
     
     def ip(self): # inner product
         if Is(self.state1).ket() and Is(self.state2).ket():
@@ -280,34 +468,36 @@ class Qp:
         if Is(self.state1).square() or Is(self.state2).square():
             raise ValueError("Both inputs must be 1D vectors.")
         return Q(self.state1 @ self.state2.conj().T)
-    
-    def tp(self): # Tensor product
-        return Q(np.kron(self.state1, self.state2))
-    
+
+    def tp(self): 
+        """Computes the tensor product of all states stored in this Qp instance."""
+        combined_matrix = fold(np.kron, [q.state.copy() for q in self.q_objs])
+        return Q(combined_matrix)
+
     def fid(self): # Fidelity
         # Case 1: both are pure states (kets)
         if Is(self.state1).ket() and Is(self.state2).ket():
             value = self.ip()  # <psi|phi>
             fidelity = np.abs(value).item()
-            return round(fidelity, 4)
+            return round(fidelity.real, 4)
 
         # Case 2: both are density matrices
         elif Is(self.state1).square() and Is(self.state2).square():
             sqrt_rho = sqrtm(self.state1)
             inner = sqrt_rho @ self.state2 @ sqrt_rho
             sqrt_inner = sqrtm(inner)
-            fidelity = np.real(np.trace(sqrt_inner))**2
-            return round(fidelity, 4)
+            fidelity = np.real(np.trace(sqrt_inner))
+            return round(float(fidelity.real), 4)
         
         # Case 3: one pure, one mixed
         elif Is(self.state1).ket() and Is(self.state2).square():
             fidelity = np.abs((Q(self.state1).d() @ self.state2 @ self.state1).item())
             fidelity = np.sqrt(fidelity)
-            return round(fidelity, 4)
+            return round(fidelity.real, 4)
         elif Is(self.state1).square() and Is(self.state2).ket():
             fidelity = np.abs((Q(self.state2).d() @ self.state1 @ self.state2).item())
             fidelity = np.sqrt(fidelity)
-            return round(fidelity, 4)
+            return round(fidelity.real, 4)
         else:
             raise ValueError("Unsupported input types for fidelity.")
 
@@ -358,3 +548,14 @@ class Ebit:
             return val
         else:
             raise ValueError("Input must be 4x1 ket or 4x4 density matrix.")
+
+#fold function for the repetetive operation application
+
+def fold(operation, objects):
+    """operation : callable (f(acc, item) -> acc)
+    objects   : list or tuple of elements to reduce
+    """
+    result = objects[0]
+    for obj in objects[1:]:
+        result = operation(result, obj)
+    return result
