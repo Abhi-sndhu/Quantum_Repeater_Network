@@ -4,13 +4,19 @@ from qrnetwork import *
 # from qrnetwork import Q, Qp, Is, Ebit, Teleport, Qrep
 
 ## Define quantum states
-# ket0 = Q([[1], [0]])
+ket0 = Q([[1], [0]])
 # print(ket0)
+# ket0 = np.array([[1,0],[0,1]], dtype=complex)
 # ket1 = Q([[0], [1]])
-# print(ket1)
+# print(ket0 @ ket1)  
 
-## Density matrix
-# qC = Q(Q.Bell.phi_plus).dm()
+# X = [Q.Pauli.X, Q.Pauli.Y, Q.Pauli.Z]
+# X[0][0, 0] = 3
+# a = Q.Bell.phi_plus
+# b = [a.copy() for i in range(5)]
+print((ket0.dm()).expand_mixed([0],2))## Density matrix
+# print(StarProtocol.piecemaker(3))
+# qC = Q.Bell.phi_plus.dm()
 # qC = Q([[1], [0], [0], [1]]).dm()
 # print(qC)
 
@@ -46,7 +52,7 @@ from qrnetwork import *
 # Q.Bell.all()
 # bell_states= [Q.Bell.phi_plus, Q.Bell.phi_minus, Q.Bell.psi_plus, Q.Bell.psi_minus]
 # print(bell_states)
-# print(phi_minus)
+# print(phi_plus)
 
 ## Print Pauli operations
 # X = Q.Pauli.X
@@ -95,23 +101,21 @@ from qrnetwork import *
 # print(results)
 
 ## Get output of linear quantum repeater network without noise
-shared_ent_state = [Qp(Q.Bell.psi_plus).op(),Qp(Q.Bell.phi_minus).op(),
-                    Qp(Q.Bell.phi_plus).op(),Qp(Q.Bell.psi_plus).op(), 
-                    Qp(Q.Bell.phi_minus).op()]
+# shared_ent_state = [Qp(Q.Bell.psi_plus).op(),Qp(Q.Bell.phi_minus).op(),
+#                     Qp(Q.Bell.phi_plus).op(),Qp(Q.Bell.psi_plus).op(), 
+#                     Qp(Q.Bell.phi_minus).op()]
 # shared_ent_state = [Q.Bell.psi_plus,Q.Bell.psi_minus,Q.Bell.phi_plus,Q.Bell.phi_minus,Q.Bell.psi_plus]
-Rep = QRep(shared_ent_state)
-noise = Rep.noise(L=10, T_p=1e-8, T_dp=1e-5, eta=0.3, p_d=1e-8)
-results = Rep.linear()
+# results = QRep(shared_ent_state).linear()
 ## Get output of linear quantum repeater network with noise
 # start_time = time.time()
-# results = QRep(shared_ent_state).noise(L=40, T_p= 1e-6, T_dp = 1, eta = 0.3, p_d = 1e-8).linear()
+# results = QRep(shared_ent_state).noise(L=20, T_p= 1e-8, T_dp = 1, eta = 0.3, p_d = 1e-8).linear()
 # results = QRep(shared_ent_state).noise(L=40, T_p= 1e-6, T_dp = 1, eta = 0.3, p_d = 1e-8, loss=0.8).linear()
 # end_time = time.time() 
 # elapsed_time = end_time - start_time
 # print(f"Results: {results}\n Execution time: {elapsed_time} seconds")
 
 ## Print output
-print(results)
+# print(results)
 
 # Noisy Eswap Model
 # noise_init = eswap(Qp(Q.Bell.psi_plus).op(),Qp(Q.Bell.phi_minus).op())
