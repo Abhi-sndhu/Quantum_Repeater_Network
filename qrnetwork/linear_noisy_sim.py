@@ -41,6 +41,8 @@ class SimulationConfig:
     dephasing_param_s: float = 0.01
     # Imperfect BSM
     bsm_fidelity: float = 1.0
+    # Entanglement Swapping Policy
+    swap_policy: str = "asap"                  # asap/last/nesting
     # Spatial-multiplexing
     n_target_links: int = 1
     n_parallel_slots: int = 1              # Increase n_parallel_slots for spatial-multiplexing (multi-memory slots model)
@@ -163,28 +165,38 @@ class Scheduler:
                     finish_t, link = self.start_source_attempt(l_slot, r_slot, now)
                     queue.push(finish_t, EventType.SOURCE_COMPLETE, link)
 
-    def start_swap(self, repeater: int, inner_left_slot: MemorySlot, inner_right_slot: MemorySlot, now: float) -> SwapAttempt:
+    def start_swap(self, repeater: int, inner_left_slot: MemorySlot, inner_right_slot: MemorySlot, now: float, det_swap: bool=False) -> SwapAttempt:
         left_link, right_link = inner_left_slot.link, inner_right_slot.link
         assert left_link is not None and right_link is not None
         outer_left_slot, outer_right_slot = left_link.left_slot, right_link.right_slot
 
         left_wait = now - left_link.ready_time
         right_wait = now - right_link.ready_time
-        succeeded, result = self.swapper.attempt(left_link.rho, right_link.rho, left_wait, right_wait, self.rng)
-
         for slot in (inner_left_slot, inner_right_slot, outer_left_slot, outer_right_slot):
             slot.status = SlotStatus.PENDING
 
-        resolve_time = now + self.t_swap
-        new_link = None
-        if succeeded:
+        if det_swap: # For simultaneous deterministic swapping ("last")
+            # This keeps deterministic swapping both hierarchical(for correct density matrix calculation) and simulataneous(no extra extra wait time)
+            if repeater == self.chain.rep_nodes:
+                resolve_time = now + self.t_swap  # Total time taken for all swaps = t_swap
+            else:
+                resolve_time = now
+            result = self.swapper.det_swap(left_link.rho, right_link.rho, left_wait, right_wait, self.rng)
             new_link = Link(rho=result, ready_time=resolve_time, left_slot=outer_left_slot, 
-                                     right_slot=outer_right_slot,)
+                                                    right_slot=outer_right_slot,)
+            succeeded = True
+        else:
+            succeeded, result = self.swapper.attempt(left_link.rho, right_link.rho, left_wait, right_wait, self.rng)
+            new_link = None
+            resolve_time = now + self.t_swap
+            if succeeded:
+                new_link = Link(rho=result, ready_time=resolve_time, left_slot=outer_left_slot, 
+                                        right_slot=outer_right_slot,)
 
         return resolve_time, SwapAttempt(repeater=repeater, inner_left=inner_left_slot, inner_right=inner_right_slot, outer_left=outer_left_slot, 
                            outer_right=outer_right_slot, succeeded=succeeded, new_link=new_link,)
 
-    def schedule_swaps(self, now: float, queue: EventQueue) -> None:
+    def schedule_swap_asap(self, now: float, queue: EventQueue) -> None:
         for r_idx in self.chain.repeater_indices(): #for all repeaters
             node = self.chain.nodes[r_idx]
             for l_slot in node.left_slots:
@@ -195,10 +207,24 @@ class Scheduler:
                             queue.push(finish_t, EventType.SWAP_RESOLVE, swap_attempt)
                             break
 
+    def schedule_swap_last(self, now: float, queue: EventQueue) -> None:
+        for r_idx in self.chain.repeater_indices():
+            l_slot = self.chain.nodes[r_idx].left_slots[0]   # Only for n_parallel_slots == 1
+            r_slot = self.chain.nodes[r_idx].right_slots[0]
+            if l_slot.status == SlotStatus.READY and l_slot.link is not None and r_slot.status == SlotStatus.READY and r_slot.link is not None:
+                finish_t, swap_attempt = self.start_swap(r_idx, l_slot, r_slot, now, det_swap = True)
+                queue.push(finish_t, EventType.SWAP_RESOLVE, swap_attempt)
+                break                
+
 
 # ---------------------------------------------------------------------------
 # Simulation Engine & Results
 # ---------------------------------------------------------------------------
+class SwapPolicy(str,Enum):
+    SWAP_AT_LAST = "last"
+    NESTING = "nesting"
+    SWAP_ASAP = "asap"
+
 @dataclass
 class CompletedLink:
     rho: Q
@@ -220,21 +246,35 @@ class RepeaterSimulation:
         self.rng = np.random.default_rng(config.seed) #defining rng for the entire run with seed managed
         self.chain = RepeaterChain(config.rep_nodes, config.n_parallel_slots)
 
-        ent_noise = Noise.calculate_stats(config.dephasing_param_s, config.bsm_fidelity,
+        ent_gen_noise = Noise.calculate_stats(config.dephasing_param_s, config.bsm_fidelity,
                                              config.pairgen_prob_pertrial, config.pairgen_prob_pertrial, 
                                              config.dark_count_probability)
         swap_noise = Noise.calculate_stats(config.dephasing_param_s, config.bsm_fidelity,
                                            config.channel_efficiency, config.channel_efficiency, 
                                            config.dark_count_probability)
-        self.source = EntGenSource(noise=ent_noise, trial_time_s=config.trial_time_s,
+        self.source = EntGenSource(noise=ent_gen_noise, trial_time_s=config.trial_time_s,
                                    source_state_fidelity=config.source_state_fidelity,)
         self.swapper = RepSwap(swap_noise)
+        self.swap_policy = SwapPolicy(config.swap_policy)
         self.scheduler = Scheduler(chain=self.chain, source=self.source, swapper=self.swapper, 
                                    swapping_time_s=config.swapping_time_s, rng=self.rng,)
         self.queue = EventQueue()
         self.now = 0.0
 
-    def run(self) -> SimulationResult:
+    def last_policy_failed_attempts(self) -> None:
+        prob_success_swaps = (self.swapper.noise.eta_eff)**self.config.rep_nodes
+        n_attempts = self.rng.geometric(prob_success_swaps)
+        attempt_time = 0.0
+        for _ in range(n_attempts-1):
+            n_trials = max(self.rng.geometric(self.source.noise.eta_eff) for _ in self.chain.links_indices())
+            ready_time = n_trials * self.config.trial_time_s
+            attempt_time += ready_time + self.config.swapping_time_s
+        self.now += attempt_time
+
+    def run(self) -> SimulationResult:  
+        if self.swap_policy == SwapPolicy.SWAP_AT_LAST:
+            self.last_policy_failed_attempts()
+        
         completed_links: list[CompletedLink] = []
         self.scheduler.schedule_source_attempts(self.now, self.queue)
 
@@ -279,8 +319,15 @@ class RepeaterSimulation:
                     swap.outer_left.link = None
                     swap.outer_right.link = None
 
-            self.scheduler.schedule_source_attempts(self.now, self.queue)
-            self.scheduler.schedule_swaps(self.now, self.queue)
+            if self.swap_policy == SwapPolicy.SWAP_AT_LAST:
+                if not self.queue and len(completed_links) < self.config.n_target_links: # empty queue
+                    self.scheduler.schedule_swap_last(self.now, self.queue) # Deterministic swaps
+                    if not self.queue:  # still queue empty (Full link obtained)
+                        self.last_policy_failed_attempts()
+                        self.scheduler.schedule_source_attempts(self.now, self.queue)
+            elif self.swap_policy == SwapPolicy.SWAP_ASAP:
+                self.scheduler.schedule_source_attempts(self.now, self.queue)
+                self.scheduler.schedule_swap_asap(self.now, self.queue)
 
         avg_fid = float(np.mean([p.fidelity for p in completed_links])) if completed_links else 0.0
         rate = len(completed_links) / self.now if self.now > 0 else 0.0

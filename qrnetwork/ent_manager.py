@@ -79,7 +79,7 @@ class Noise:
     def imperfect_bsm(self, rho_4q: Q) -> Q:
         if self.bsm_fidelity == 1.0:
             return rho_4q
-        reduced_outer = rho_4q.partial_trace([1, 2])
+        reduced_outer = rho_4q.ptr([1, 2])
         scrambled = reduced_outer.expand_mixed(kept_positions=[0, 3], total_qubits=4)
         return self.bsm_fidelity * rho_4q + (1 - self.bsm_fidelity) * scrambled
 
@@ -90,13 +90,13 @@ class LinearEswap:
     def perform(cls, rho_left_pair: Q, rho_right_pair: Q, noise: Noise, rng: np.random.Generator,) -> Q:
         rho_4q = Qp(rho_left_pair, rho_right_pair).tp()
         rho_4q = noise.imperfect_bsm(rho_4q)
-        probs = np.array( [(P @ rho_4q).trace() for P in _MIDDLE_PROJECTORS] )
+        probs = np.array( [(P @ rho_4q).tr() for P in _MIDDLE_PROJECTORS] )
         probs_normalised = probs / probs.sum()
         outcome = int(rng.choice(2, p=probs_normalised))  # 0 -> psi+ heralded, 1 -> psi- heralded
 
         projector = _MIDDLE_PROJECTORS[outcome]
         projected = projector @ rho_4q @ projector / probs[outcome]
-        rho_outer = projected.partial_trace([1, 2])
+        rho_outer = projected.ptr([1, 2])
         correction = _CORRECTION_OPS[outcome]
         rho_corrected = correction @ rho_outer @ correction.d()
 
@@ -139,3 +139,14 @@ class RepSwap:
 
         result = LinearEswap.perform(rho_left, rho_right, self.noise, rng)
         return True, result
+
+    # Deterministic Swap
+    def det_swap(self, rho_left_pair: Q, rho_right_pair: Q, left_wait_time_s: float, 
+                right_wait_time_s: float, rng: np.random.Generator,) -> Q:
+        rho_left = self.noise.mem_dephasing(rho_left_pair, left_wait_time_s, qubit=0)
+        rho_left = self.noise.mem_dephasing(rho_left, left_wait_time_s, qubit=1)
+        rho_right = self.noise.mem_dephasing(rho_right_pair, right_wait_time_s, qubit=0)
+        rho_right = self.noise.mem_dephasing(rho_right, right_wait_time_s, qubit=1)
+
+        result = LinearEswap.perform(rho_left, rho_right, self.noise, rng)
+        return result

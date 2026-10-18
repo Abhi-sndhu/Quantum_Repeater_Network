@@ -22,6 +22,8 @@ config = SimulationConfig(
     dephasing_param_s=0.01,
     # Imperfect BSM
     bsm_fidelity=0.99,
+    # Entanglement Swapping Policy
+    swap_policy="last",
     # Seed for reproducibility
     seed=102,
     )
