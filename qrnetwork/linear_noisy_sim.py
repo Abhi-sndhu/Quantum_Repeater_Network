@@ -64,6 +64,10 @@ class SimulationConfig:
             raise ValueError("Multi-Photons noise is too much. Reduce laser power.")
         if self.detection_window_s > 1/(self.laser_rep_rate_MHz * 1e6):
             raise ValueError("More than one pulse per detector window. Reduce detection_window_s or reduce laser_rep_rate_MHz")
+        if self.swap_policy in (SwapPolicy.SWAP_AT_LAST, SwapPolicy.NESTING) and self.n_parallel_slots > 1:
+            raise ValueError("This scenario is not yet defined.")
+        if self.swap_policy == SwapPolicy.NESTING and ((self.rep_nodes + 1) & self.rep_nodes) != 0:
+            raise ValueError("Nesting requires rep_nodes = 2^k - 1 (e.g., 1, 3, 7, 15).")
 
     @property
     def pairgen_prob_pertrial(self) -> float:   #0.01 # P(n)=mu^n/(1+mu)^(n+1), where n is number of pairs and
@@ -216,6 +220,32 @@ class Scheduler:
                 queue.push(finish_t, EventType.SWAP_RESOLVE, swap_attempt)
                 break                
 
+    def schedule_swap_nesting(self, now: float, queue: EventQueue) -> None:
+        for r_idx in self.chain.repeater_indices():
+            node = self.chain.nodes[r_idx]
+            l_slot = node.left_slots[0]   # Only for n_parallel_slots == 1
+            r_slot = node.right_slots[0]
+            if l_slot.status == SlotStatus.READY and l_slot.link is not None and r_slot.status == SlotStatus.READY and r_slot.link is not None:
+                outer_node_left = l_slot.link.left_node
+                outer_node_right = r_slot.link.right_node
+                nesting_level_max = int(np.log2(self.chain.rep_nodes + 1))
+                nesting_level = np.zeros((1,self.chain.rep_nodes))
+                old_rep = [self.chain.rep_nodes+1]
+                for n in reversed(range(nesting_level_max)):
+                    new_rep = []
+                    for i in old_rep:
+                        new_rep.append(i-min(old_rep)/2)
+                        new_rep.append(i+min(old_rep)/2)
+                    for r in new_rep:
+                        if r < self.chain.rep_nodes+1:
+                            r= int(r)
+                            nesting_level[0][r-1] = n + 1
+                    old_rep = new_rep
+
+                if outer_node_right.index - outer_node_left.index == 2**nesting_level[0][r_idx-1]:
+                    finish_t, swap_attempt = self.start_swap(r_idx, l_slot, r_slot, now)
+                    queue.push(finish_t, EventType.SWAP_RESOLVE, swap_attempt)
+
 
 # ---------------------------------------------------------------------------
 # Simulation Engine & Results
@@ -320,11 +350,14 @@ class RepeaterSimulation:
                     swap.outer_right.link = None
 
             if self.swap_policy == SwapPolicy.SWAP_AT_LAST:
-                if not self.queue and len(completed_links) < self.config.n_target_links: # empty queue
+                if not self.queue and len(completed_links) < self.config.n_target_links: # empty queue: When Ready to Swap
                     self.scheduler.schedule_swap_last(self.now, self.queue) # Deterministic swaps
                     if not self.queue:  # still queue empty (Full link obtained)
                         self.last_policy_failed_attempts()
                         self.scheduler.schedule_source_attempts(self.now, self.queue)
+            elif self.swap_policy == SwapPolicy.NESTING:
+                self.scheduler.schedule_source_attempts(self.now, self.queue)
+                self.scheduler.schedule_swap_nesting(self.now, self.queue)
             elif self.swap_policy == SwapPolicy.SWAP_ASAP:
                 self.scheduler.schedule_source_attempts(self.now, self.queue)
                 self.scheduler.schedule_swap_asap(self.now, self.queue)

@@ -23,7 +23,7 @@ config = SimulationConfig(
     # Imperfect BSM
     bsm_fidelity=0.99,
     # Entanglement Swapping Policy
-    swap_policy="last",
+    swap_policy="nesting",
     # Seed for reproducibility
     seed=102,
     )

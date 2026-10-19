@@ -128,17 +128,7 @@ class eswap:
         return results
     def noise(self, L, T_p, T_dp, eta, p_d, loss=None): #L: Fiber length, T_p: Entanglement generation time, 
         # T_dp: Depahsing time, eta: Channel efficiency, p_d: Dark count probability
-        rhoin = np.kron(self.qubits[0], self.qubits[1])
-        # --- Amplitude damping ---
-        if loss is not None:
-            gamma = 1 - channel_efficiency(L, loss=loss)
-        else:
-            gamma = 1 - channel_efficiency(L)
-        K = amp_damp_kraus(gamma)
-        kraus_op_2q = [np.kron(np.kron(np.kron(np.eye(2), k1), k2), np.eye(2))
-                       for k1 in K for k2 in K]
-        rho1 = sum(primaryfn.Q(K) @ rhoin @ primaryfn.Q(K).d() for K in kraus_op_2q) 
-        rho1 = rho1 / np.trace(rho1)
+        rho1 = np.kron(self.qubits[0], self.qubits[1])
 
         # --- Successive Dephasing Channels --- # Noise modelled only for 2nd and 3rd qubit
         lam_t = dephasing_coeff(T_p, T_dp, L)
