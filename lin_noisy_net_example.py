@@ -31,13 +31,14 @@ config = SimulationConfig(
 setup = RepeaterSimulation(config)
 # Running the simulation
 result = setup.run()
+# Printing the results
+print(vars(result))
+# print(f"Total Simulation Time: {result.total_sim_time:.6f} s")
+# print(f"Entanglement Rate:     {result.entanglement_rate:.2f} pairs/sec")
+# print(f"Average Fidelity:      {result.average_fidelity:.4f}")
 
-print(f"Total Simulation Time: {result.total_sim_time:.6f} s")
-print(f"Entanglement Rate:     {result.entanglement_rate:.2f} pairs/sec")
-print(f"Average Fidelity:      {result.average_fidelity:.4f}")
-
-for link in result.completed_links:
-    print(f"Fidelity = {link.fidelity:.4f}, Generated at t = {link.created_time:.6f} s")
+# for link in result.completed_links:
+#     print(f"Fidelity = {link.fidelity:.4f}, Generated at t = {link.created_time:.6f} s")
 
 # #-----------------------------------------------
 # # Finding average fidelity over multiple runs

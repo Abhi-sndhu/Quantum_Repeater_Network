@@ -24,7 +24,7 @@ class SimulationConfig:
     rep_spacing_km: float = 50.0
     # Fiber
     attenuation_length_km: float = 22.0
-    fibre_speed_km_per_s: float = 200_000.0
+    fiber_speed_km_per_s: float = 200_000.0
     # Source
     source_efficiency: float = 1e-8    #conversion efficiency per photon
     source_state_fidelity: float = 1.0
@@ -98,7 +98,7 @@ class SimulationConfig:
 
     @property
     def swapping_time_s(self) -> float:   #L/c: While swapping, It takes L/2c for photon to reach Rep + L/2c for communication
-        return self.rep_spacing_km / self.fibre_speed_km_per_s
+        return self.rep_spacing_km / self.fiber_speed_km_per_s
 
 
 # ---------------------------------------------------------------------------
