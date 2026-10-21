@@ -6,22 +6,22 @@ In the package `qrnetwork`, there are three core modules `ent_manager.py`(Entang
 1. `ent_manager.py` manages Entanglement Generation `(EntGenSource)` and Entanglement Swapping `(RepSwap)`, which takes care of Memory dephasing noise, Dark counts and Imperfect BSM `(Noise)`.
 2. `network.py` manages linear chain topology `(RepeaterChain)`.
 3. `linear_noisy_sim.py` manages scheduling `(Scheduler)` and resolving events `(RepeaterSimulation)`.
-4. EntGenSource, RepSwap, RepeaterChain talks with Scheduler, which schedules source and swap events.
+4. EntGenSource, RepSwap, RepeaterChain talk with Scheduler, which schedules source and swap events.
 5. `RepeaterSimulation(config).run` starts the loop of resolving events and scheduling events till we get our desired link.
-6. `example_QR.py` is an example script for the **discrete-event, noisy quantum repeater chain simulation**.
+6. `lin_noisy_net_example.py` is an example script for the **discrete-event, noisy quantum repeater chain simulation**.
 
 
 ## Script Walkthrough
-## `example_QR.py`
+## `lin_noisy_net_example.py`
 1. **`Configuration:`** SimulationConfig object (config) is created, describing the simulation parameters.
-2. **`Initialization:`** RepeaterSimulation is constructed from config and `run()` is called, which executes the discrete-event simulation until the requested number of end-to-end entangled pairs has been generated.
+2. **`Initialization:`** RepeaterSimulation is constructed from config and **`run()`** is called, which executes the discrete-event simulation until the requested number of end-to-end entangled pairs has been generated.
 ```python
 config = SimulationConfig(
     # Nodes
     rep_nodes=3,                   # 3 repeaters + 2end nodes -> total qubits = 3*2 + 2 = 8
     rep_spacing_km=30.0,
     # Source
-    conversion_efficiency=1e-8,
+    source_efficiency=1e-8,
     source_state_fidelity=0.99,
     # Laser
     laser_power_avg_mW=0.04,
@@ -35,7 +35,7 @@ config = SimulationConfig(
     # Imperfect BSM
     bsm_fidelity=0.99,
     # Entanglement Swapping Policy
-    swap_policy="asap",
+    swap_policy="asap",           # asap/nesting/last
     # Seed for reproducibility
     seed=102,
     )
@@ -60,9 +60,9 @@ We can change any of the below attributes while configuration.
 | | source_state_fidelity | Fidelity with which source produces werner state. |
 | `Laser` | laser_pulsed | True for pulsed laser and False for continuous laser |
 | | laser_power_avg_mW | Average power of laser used to pump source in mW. |
-| | laser_rep_rate_MHz | Repitition rate of pulsed laser. |
+| | laser_rep_rate_MHz | Repetition rate of pulsed laser. |
 | | laser_wavelength_nm | Wavelength of laser. |
-| `Detector` | detector_rep_rate_MHz | Reptition rate of gated detector. Synchronized with repition rate of pulsed laser. |
+| `Detector` | detector_rep_rate_MHz | Reptition rate of gated detector. Synchronized with repetition rate of pulsed laser. |
 | | dark_count_rate_hz | Detector dark-count rate. |
 | | detection_window_s | Time for which detector stays ON. |
 | `Memory` | dephasing_param_s | Characteristic memory dephasing parameter (T_dp). |
@@ -74,16 +74,16 @@ We can change any of the below attributes while configuration.
 
 The configuration validates its inputs in `__post_init__` and exposes derived properties used internally by the simulation:
 
-- **`pairgen_prob_pertrial`** — Probability of getting one entangled pair per pulse/trial.
-- **`trial_time_s`** — Depends on the clock rate of detector.
-- **`dark_count_probability`** — dark_count_rate_hz * detection_window_s.
-- **`channel_efficiency`** — photon survival probability when it travels from source to repeater node:
+- `pairgen_prob_pertrial` — Probability of getting one entangled pair per pulse/trial.
+- `trial_time_s` — Depends on the clock rate of detector.
+- `dark_count_probability` — dark_count_rate_hz * detection_window_s.
+- `channel_efficiency` — photon survival probability when it travels from source to repeater node:
   `exp(-rep_spacing_km / (2 * attenuation_length_km))`.
-- **`swapping_time_s`** — Time taken by photon to travel and classical communication: `rep_spacing_km / fibre_speed_km_per_s`.
+- `swapping_time_s` — Time taken by photon to travel and classical communication: `rep_spacing_km / fiber_speed_km_per_s`.
 
 ## `RepeaterSimulation`
 
-*Defined in `linear_noisy_sim.py` — the main simulation engine that `example_QR.py` drives.*
+*Defined in `linear_noisy_sim.py` — the main simulation engine that `lin_noisy_net_example.py` drives.*
 
 ### Initialization (`__init__`)
 
@@ -92,14 +92,14 @@ Given a `SimulationConfig`, the constructor wires up all the pieces needed to ru
 - **`self.chain`** — a **`RepeaterChain`** (from `network.py`) modelling the physical topology: a list of `Node`s connected by `MemorySlot`s, built from `config.rep_nodes` and `config.n_parallel_slots`.
 - **`ent_gen_noise, swap_noise`** — two `Noise` objects computed via `Noise.calculate_stats(...)`, one for source-link generation and one for the swapping at repeater.
 - **`self.source`** — an **`EntGenSource`**: Models generation of elementary link pair (including the random wait time until a heralded success).
-- **`self.swapper`** — an **`RepSwap`**: Models an entanglement-swap attempt at a repeater node (including dephasing accumulated by each half-pair while it waited).
+- **`self.swapper`** — a **`RepSwap`**: Models an entanglement-swap attempt at a repeater node (including dephasing accumulated by each half-pair while it waited).
 - **`self.scheduler`** — a **`Scheduler`** object that ties the chain, source, and swapper together and decides when to *start* a source attempt or a swap attempt.
 - **`self.queue`** — an **`EventQueue`**, a priority queue (min-heap) of future `Event`s (`SOURCE_COMPLETE` or `SWAP_RESOLVE`), ordered by simulated time.
 - **`self.now`** — the current simulation time, starting at `0.0`.
 
 ### `run()`
 
-Executes the discrete-event loop until either the event queue empties or `n_target_pairs` end-to-end pairs have been completed:
+Executes the discrete-event loop until either the event queue empties or `n_target_links` end-to-end pairs have been completed:
 
 1. **Trigger initial source events**  
    `schedule_source_attempts` schedules entanglement-generation attempts on links whose memory slots are free and schedules `SOURCE_COMPLETE` events.
@@ -130,7 +130,7 @@ Executes the discrete-event loop until either the event queue empties or `n_targ
 
    When the simulation stops, it computes:
 
-   - **`average_fidelity`** — mean fidelity of all completed links (if n_target_links > 1).
+   - **`average_fidelity`** — mean fidelity of all completed links (if n_target_links > 1). Actual fidelity (if n_target_links == 1)
    - **`entanglement_rate`** — end to end links generated per second.
 
 5. **Return the result**

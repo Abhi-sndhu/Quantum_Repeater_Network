@@ -53,7 +53,7 @@ class SimulationConfig:
         if self.rep_nodes < 1:
             raise ValueError("rep_nodes must be >= 1 (need at least one repeater)")
         if self.n_parallel_slots < 1:
-            raise ValueError("n_parallel_links must be >= 1")
+            raise ValueError("n_parallel_slots must be >= 1")
         if not (0.0 <= self.source_state_fidelity <= 1.0):
             raise ValueError("source_state_fidelity must be in [0, 1]")
         if not (0.0 <= self.bsm_fidelity <= 1.0):
@@ -169,7 +169,7 @@ class Scheduler:
                     finish_t, link = self.start_source_attempt(l_slot, r_slot, now)
                     queue.push(finish_t, EventType.SOURCE_COMPLETE, link)
 
-    def start_swap(self, repeater: int, inner_left_slot: MemorySlot, inner_right_slot: MemorySlot, now: float, det_swap: bool=False) -> SwapAttempt:
+    def start_swap(self, repeater: int, inner_left_slot: MemorySlot, inner_right_slot: MemorySlot, now: float, det_swap: bool=False) -> tuple[float, SwapAttempt]:
         left_link, right_link = inner_left_slot.link, inner_right_slot.link
         assert left_link is not None and right_link is not None
         outer_left_slot, outer_right_slot = left_link.left_slot, right_link.right_slot

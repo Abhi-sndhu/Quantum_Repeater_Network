@@ -88,6 +88,9 @@ Quantum states are represented either by a complex wave function or a complex co
 | `Q(input).u()` | Gives normalized state of an input matrix array. |
 | `Q(input).dm()` | Gives density matrix if input array is a ket vector. |
 | `Q(input).purity()` | Gives purity as 1 if an input matrix array is a ket vector and calculates `tr(input^2)` if input array is a square matrix. |
+| `Q(input).tr()` | Gives trace of an input matrix array. |
+| `Q(input).ptr([indices of qubits])` | Gives partial trace of an input matrix array, tracing out qubits at specified indices. |
+| `Q(input).expand_mixed([kept positions], N)` | Expands input state to N-qubits state, adding maximally mixed state (I/2) at vacant positions.  |
 | `Q.rand.Haar(n)` | Gives a random Haar unitary matrix of size n × n. |
 | `Q.rand.p(n)` | Gives a random n-qubit pure state. |
 | `Q.rand.m(n)` | Gives a random n-qubit mixed state. |
